@@ -29,6 +29,7 @@ md=GenEgrData()
 import scipy.stats as stats
 from src.visualization import visualize as vs
 from src.features import build_features as bf
+
 #%% #################################### Load Dataset #########################################################
 #%% ############################################################################################################
 ## egr data

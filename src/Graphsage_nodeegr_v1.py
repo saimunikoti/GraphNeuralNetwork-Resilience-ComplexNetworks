@@ -25,7 +25,7 @@ md = GenEgrData()
 datadir = ".\data\processed\\adj_egrclass_pl_2000n_"
 predictor, label, feature, listgraph = md.gen_egr_plmodel(1, 200, datadir, "adjacency", genflag=1)
 
-####### for same graph
+######## for same graph
 
 # listgraph.append(listgraph[0])
 # label = np.concatenate((label,label), axis=1)
@@ -60,6 +60,7 @@ test_targets = np.array(test_subjects)
 ##%% #################################### Graphsage Model building ###########################################
 #%% ############################################################################################################
 """ bacth size should be a common factor of length of both training and testing data """
+
 batch_size = 20
 num_samples = [10, 5,5,10]
 generator = Custom_GraphSAGENodeGenerator(graphlist, batch_size, num_samples)
