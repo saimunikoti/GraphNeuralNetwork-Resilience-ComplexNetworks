@@ -22,8 +22,8 @@ md = GenEgrData()
 
 #################################### Load Dataset #########################################################
 
-datadir = ".\data\processed\\adj_egrclass_pl_2000n_"
-predictor, label, feature, listgraph = md.gen_egr_plmodel(1, 200, datadir, "adjacency", genflag=1)
+datadir = ".\data\processed\\adj_egrclass_pl_100n_"
+predictor, label, feature, listgraph = md.gen_egr_plmodel(1, 500, datadir, "adjacency", genflag=1)
 
 ####### for same graph
 
@@ -61,7 +61,7 @@ test_targets = np.array(test_subjects)
 #%% ############################################################################################################
 """ bacth size should be a common factor of length of both training and testing data """
 batch_size = 20
-num_samples = [10, 5,5,10]
+num_samples = [10, 5, 5, 10]
 generator = Custom_GraphSAGENodeGenerator(graphlist, batch_size, num_samples)
 
 train_gen = generator.flow(train_subjects.index, train_targets, shuffle=True)  # train_subjects.index for selecting training nodes
@@ -72,7 +72,7 @@ graphsage_model = GraphSAGE(layer_sizes=[32, 16, 8, 8], generator=generator, act
                             bias=True, dropout = 0.0)
 
 x_inp, x_out = graphsage_model.in_out_tensors()
-prediction = layers.Dense(units=train_targets.shape[1], activation="relu")(x_out)
+prediction = layers.Dense(units=train_targets.shape[1], activation="linear")(x_out)
 
 model = Model(inputs=x_inp, outputs=prediction)
 
@@ -103,9 +103,10 @@ def noderankloss(index):
 ## MODEL COMPILE AND TRAINING
 
 model.compile( optimizer=optimizers.Adam(lr=0.005), loss = noderankloss(indices), metrics=["acc"])
-# model.compile( optimizer=optimizers.Adam(lr=0.005), loss="mean_squared_error", metrics=["acc"])
 
-filepath ='.\models\\EGR_Graphsage\\pl500-2000_m1test.h5'
+model.compile( optimizer=optimizers.Adam(lr=0.005), loss="mean_squared_error", metrics=["acc"])
+
+filepath ='.\models\\EGR_Graphsage\\pl500-200_m1test.h5'
 mcp = ModelCheckpoint(filepath, save_best_only=True, monitor='val_loss', mode='min')
 
 history = model.fit(train_gen, epochs=10, validation_data=test_gen, callbacks=[mcp], verbose=2, shuffle=False)
