@@ -628,8 +628,9 @@ class GenEgrData():
 
         return xtrain, ytrain, ftrain, xtest, ytest, ftest
 
-def get_graphfromdf(edgelist, source, target):
-    g = nx.from_pandas_edgelist(edgelist, source, target)
+def get_graphfromdf(path, source,target):
+    tempdf = pd.read_csv(path)
+    g = nx.from_pandas_edgelist(tempdf, source,target)
     return g
 
 def get_graphtxt(path):
