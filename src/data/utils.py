@@ -669,9 +669,13 @@ def get_egrbatch(countnode):
 
     return np.sum(np.reciprocal(eigtemp1))
 
-def get_graphfeaturelabel_real(filepath, metrictype):
+def get_wghtspctrmbatch(graph):
 
-    filepath = config.datapath + 'raw'+ fileext
+    lambdas = nx.linalg.spectrum.normalized_laplacian_spectrum(graph)
+
+    return sum([(1 - eigs)**3 for eigs in lambdas])
+
+def get_graphfeaturelabel_real(filepath, metrictype):
 
     g = get_graphtxt(filepath)
 
@@ -679,16 +683,42 @@ def get_graphfeaturelabel_real(filepath, metrictype):
 
     Listnodes = tqdm(list(g.nodes()))
 
+    # parallel processing
+    # if metrictype == 'egr':
+    #     metricraw = Parallel(n_jobs=4, prefer="threads")(delayed(get_egrbatch)(node) for node in Listnodes)
+    # elif metrictype == 'weightedspectrum':
+    #     metricraw = Parallel(n_jobs=4, prefer="threads")(delayed(get_egrbatch)(node) for node in Listnodes)
+
+    metricraw = {}
+    Listnodes = list(g.nodes())
+
     if metrictype == 'egr':
-        metricraw = Parallel(n_jobs=4, prefer="threads")(delayed(get_egrbatch)(node) for node in Listnodes)
+        for countnode, node in enumerate(Listnodes):
+            metricraw[node] = get_egrbatch(node)
+            print("node ", countnode)
+
+        metricarray = np.array(list(metricraw.values()))
+
+        metricarray = metricarray * (2/(len(g.nodes)-1))
+
+        metricarray = np.round(metricarray, 3)
+
+        ranks = rankdata(metricarray, method='dense')
+
     elif metrictype == 'weightedspectrum':
-        metricraw = Parallel(n_jobs=4, prefer="threads")(delayed(get_egrbatch)(node) for node in Listnodes)
 
-    metricraw = metricraw * (2/(len(g.nodes)-1))
+        for countnode, node in enumerate(Listnodes):
+            gcopy = g.copy()
+            gcopy.remove_node(node)
+            metricraw[node] = get_wghtspctrmbatch(gcopy)
+            print("n", countnode)
 
-    metricraw = np.round(metricraw, 3)
+        metricarray = np.array(list(metricraw.values()))
 
-    ranks = rankdata(metricraw, method='dense')
+        metricarray = np.round(metricarray, 3)
+
+        # higher ws corresponds to lower robustness/connectivity
+        ranks = rankdata([-1 * i for i in metricarray], method='dense')
 
     ranks = (ranks - min(ranks)) / (max(ranks) - min(ranks))
 
