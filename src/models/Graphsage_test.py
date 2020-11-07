@@ -27,7 +27,7 @@ print(G.info())
 #%% ############################################################################################################
 
 batch_size = 70
-num_samples = [10, 10, 5, 5]
+num_samples = [15, 10, 5, 5]
 generator = GraphSAGENodeGenerator(G, batch_size, num_samples)
 
 targets = np.array(targetdf['btw'])
@@ -56,9 +56,9 @@ def noderankloss(index):
 
 ## load
 
-filepath ='.\models\\Graphsage' + fileext + '_rl.h5'
+filepath ='.\models\\Graphsage' + fileext + '_rl_maxpool.h5'
 
-model = load_model(filepath, custom_objects={"MeanAggregator": MeanAggregator,'loss': noderankloss(indices)})
+model = load_model(filepath, custom_objects={"MaxPoolingAggregator": MaxPoolingAggregator,'loss': noderankloss(indices)})
 #model = load_model(filepath, custom_objects={"MeanAggregator": MeanAggregator})
 
 ##%% #################################### Model Evaluation ######################################################
@@ -69,14 +69,15 @@ all_mapper = generator.flow(all_nodes)
 y_pred = model.predict(all_mapper)
 
 ## kendall tau metric for rank
+
 ktau, p_value = stats.kendalltau(targetdf['btw'], y_pred)
 
 print("kendalls tau ", ktau)
 print("top k perfom")
 
 ## top k pf
-vs.compute_topkperf(targetdf['btw'], y_pred, 0.95)
 
+vs.compute_topkperf(targetdf['btw'], y_pred, 0.90)
 
 
 

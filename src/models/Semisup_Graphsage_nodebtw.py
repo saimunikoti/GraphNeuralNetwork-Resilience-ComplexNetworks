@@ -235,10 +235,10 @@ def noderankloss():
 model.compile( optimizer=optimizers.Adam(), loss = noderankloss(), metrics=["acc"])
 model.compile( optimizer=optimizers.RMSprop(), loss="mean_squared_error", metrics=["acc"])
 
-filepath ='.\models\\Graphsage' + fileext + '_rl.h5'
+filepath ='.\models\\Graphsage' + fileext + '_mse.h5'
 mcp = ModelCheckpoint(filepath, save_best_only=True, monitor='val_loss', mode='min')
 
-history = model.fit(train_gen, epochs=20, validation_data=test_gen, callbacks=[mcp], verbose=2, shuffle=False)
+history = model.fit(train_gen, epochs=30, validation_data=test_gen, callbacks=[mcp], verbose=2, shuffle=False)
 
 ##
 
