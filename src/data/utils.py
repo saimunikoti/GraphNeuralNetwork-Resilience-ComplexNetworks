@@ -10,7 +10,7 @@ from src.data import config
 from joblib import Parallel, delayed
 import time, math
 from tqdm import tqdm
-
+import random
 ##
 class GenerateData():
     def __init__(self):
@@ -290,7 +290,7 @@ class GenEgrData():
         print("Generation of EGR class is invoked")
 
     def get_egr(self, graph):
-        eig = nx.linalg.spectrum.laplacian_spectrum(graph)
+        eig = nx.linalg.spectrum.laplacian_spectrum(graph, weight='weight')
         try:
             eigtemp1 = [1/num for num in eig if num > 5e-10]
             # eig = [1 / num for num in eig[1:] if num != 0]
@@ -345,21 +345,26 @@ class GenEgrData():
 
         return ranks
 
+    def get_egrscore(self,g):
+
+        egr_new = np.zeros(len(g.nodes))
+
+        for countnode, node in enumerate(g.nodes()):
+
+            gcopy = g.copy()
+            gcopy.remove_node(node)
+            egr_new[countnode] = self.get_egr(gcopy)
+
+        return egr_new
+
     def get_egrnoderank(self, g):
 
         egr_new = np.zeros(len(g.nodes))
         for countnode, node in enumerate(g.nodes()):
-            # g[v1][v2]['edgepos'] = countedge
             gcopy = g.copy()
-            ## node removal at secondary
-            # noderemoval=[node]
-            # for neighbor in g.neighbors(node):
-            #     if g.degree(neighbor) == 1:
-            #         noderemoval.append(neighbor)
-
             gcopy.remove_node(node)
             egr_new[countnode] = self.get_egr(gcopy)
-            # print(countnode)
+            print(countnode)
 
         # lower egr corresponds to low robustness/connectivity
         ranks = rankdata(egr_new, method='dense')
@@ -391,6 +396,10 @@ class GenEgrData():
 
             def get_sample(metrictype):
                 g = nx.generators.random_graphs.powerlaw_cluster_graph(V, 1, 0.1)
+                # random weight allocations
+                g = get_weightsalloc(g)
+
+                # weight (random) allocation
 
                 ## node rank on the basis of egr/weighted spectrum
                 if metrictype == 'egr':
@@ -431,6 +440,51 @@ class GenEgrData():
 
         return np.array(targetvec), np.array(featurevec), graphvec
 
+    # power law cluster model with
+
+    def gen_plclustermodel_score(self, n, V, metrictype, genflag=0):
+        if genflag ==1:
+            targetvec = []
+            featurevec = []
+            graphvec = []
+
+            enc = OneHotEncoder(handle_unknown='ignore')
+
+            def get_sample(metrictype):
+                g = nx.generators.random_graphs.powerlaw_cluster_graph(V, 1, 0.1)
+
+                ## node rank on the basis of egr/weighted spectrum
+                if metrictype == 'egr':
+                    ranks = self.get_egrscore(g)
+                elif metrictype == 'weightedspectrum':
+                    ranks = self.get_wghtspectnoderank(g)
+
+                # ranks = (ranks - min(ranks)) / (max(ranks) - min(ranks))
+
+                degfeat = (np.sum(nx.adj_matrix(g).todense(), axis=1))
+                x = np.reshape(np.arange(V), (V, 1))
+                Idenfeat = enc.fit_transform(x).toarray()
+                feat = np.concatenate((Idenfeat, degfeat), axis=1)
+
+                return ranks, feat, g
+
+            for i in range(n):
+                target, feature,g = get_sample(metrictype)
+                # inputtensor.append(input)
+                targetvec.append(target)
+                featurevec.append(feature)
+                graphvec.append(g)
+
+        else:
+            print("invalid arguement")
+            # inputtensor = np.load(datadir + 'predictor.npy')
+            # targetvec = np.load(datadir + 'target.npy')
+            # featurevec = np.load(datadir + 'feature.npy')
+            # graphvec = np.load(datadir + 'graphvec.npy')
+
+        return np.array(targetvec), np.array(featurevec), graphvec
+
+
     # generate scale-free model (power law degre dist.)
     def gen_plmodel(self, n, V, metrictype, genflag=0):
         if genflag ==1:
@@ -443,6 +497,9 @@ class GenEgrData():
             def get_sample(metrictype):
 
                 g = nx.scale_free_graph(V).to_undirected()
+
+                # random weight allocations
+                g = get_weightsalloc(g)
 
                 ## node rank on the basis of egr/weighted spectrum
                 if metrictype == 'egr':
@@ -637,6 +694,11 @@ def get_graphtxt(path):
     g = nx.read_edgelist(path, create_using=nx.DiGraph(), nodetype=int)
     return g
 
+def get_weightsalloc(G):
+    for u,v in G.edges():
+        G[u][v]['weight'] = random.uniform(0, 1)
+    return G
+
 def get_graphfeaturelabel_syn(graphtype, metrictype, graphsizelist):
     listgraph=[]
     listlabel=[]
@@ -659,10 +721,45 @@ def get_graphfeaturelabel_syn(graphtype, metrictype, graphsizelist):
 
     return listgraph, listlabel
 
-def get_egrbatch(countnode):
+def get_weightedgraphfeaturelabel_syn(graphtype, metrictype, graphsizelist):
+    listgraph=[]
+    listlabel=[]
+    md = GenEgrData()
+
+    if graphtype == 'pl':
+
+        for graphsize in graphsizelist:
+            label, feature, graphlist = md.gen_plmodel(1, graphsize, metrictype, genflag=1)
+            listgraph.append(graphlist[0])
+            listlabel.append(label[0, :])
+            print("current loop element", graphsize)
+
+    elif graphtype == 'plc':
+        for graphsize in graphsizelist:
+            label, feature, graphlist = md.gen_plclustermodel(1, graphsize, metrictype, genflag=1)
+            listgraph.append(graphlist[0])
+            listlabel.append(label[0, :])
+            print("current loop element", graphsize)
+
+    return listgraph, listlabel
+
+def get_estgraphlabel(g, metrictype):
+    md = GenEgrData()
+    rankslist=[]
+    ## node rank on the basis of egr/weighted spectrum
+    if metrictype == 'egr':
+        ranks = md.get_egrnoderank(g)
+    elif metrictype == 'weightedspectrum':
+        ranks = md.get_wghtspectnoderank(g)
+
+    ranks = (ranks - min(ranks)) / (max(ranks) - min(ranks))
+
+    return ranks
+
+def get_egrbatch(g, node):
 
     gcopy = g.copy()
-    gcopy.remove_node(countnode)
+    gcopy.remove_node(node)
     eig = nx.linalg.spectrum.laplacian_spectrum(gcopy)
 
     eigtemp1 = eig[eig > 5e-10]
@@ -675,13 +772,8 @@ def get_wghtspctrmbatch(graph):
 
     return sum([(1 - eigs)**3 for eigs in lambdas])
 
-def get_graphfeaturelabel_real(filepath, metrictype):
-
-    g = get_graphtxt(filepath)
-
-    g = g.to_undirected()
-
-    Listnodes = tqdm(list(g.nodes()))
+def get_graphfeaturelabel_real(g, metrictype):
+    # Listnodes = tqdm(list(g.nodes()))
 
     # parallel processing
     # if metrictype == 'egr':
@@ -694,7 +786,7 @@ def get_graphfeaturelabel_real(filepath, metrictype):
 
     if metrictype == 'egr':
         for countnode, node in enumerate(Listnodes):
-            metricraw[node] = get_egrbatch(node)
+            metricraw[node] = get_egrbatch(g, node)
             print("node ", countnode)
 
         metricarray = np.array(list(metricraw.values()))

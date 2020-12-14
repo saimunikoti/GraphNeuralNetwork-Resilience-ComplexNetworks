@@ -1,5 +1,6 @@
 import networkx as nx
 import numpy as np
+import pandas as pd
 import matplotlib.pyplot as plt
 import tensorflow as tf
 
@@ -182,7 +183,6 @@ def noderankloss(index):
 
     def loss(y_true, y_pred):
         # tf.print(tf.gather(y_true, tf.constant(index[:, 0])))
-
         yt = tf.math.sigmoid(tf.gather(y_true, tf.constant(index[:, 0])) - tf.gather(y_true, tf.constant(index[:, 1])))
         yp = tf.math.sigmoid(tf.gather(y_pred, tf.constant(index[:, 0])) - tf.gather(y_pred, tf.constant(index[:, 1])))
         # tf.print(tf.shape(yt))
@@ -202,8 +202,29 @@ def combine_graphs(graphlist):
     U = nx.disjoint_union_all(graphlist)
     return U
 
+## ===================== Generate feature vector ==========================
 
+def get_graphnodefeatures(g):
+    for node_id, node_data in g.nodes(data=True):
+        node_data["feature"] = [g.degree(node_id, weight="weight"),
+                                nx.average_neighbor_degree(g, nodes=[node_id], weight="weight")[node_id], 1, 1, 1]
 
+## ================ generate data frame for graph target labels ====================
+
+def getgraphtargetdf(Listlabel, g):
+
+    # aggregate labels from all graphs
+    targetlabel = Listlabel[0]
+    for countlen in range(len(Listlabel) - 1):
+        targetlabel = np.concatenate((targetlabel, Listlabel[countlen + 1]), axis=0)
+
+    # gen datagrame of target labels
+    targetdf = pd.DataFrame()
+    targetdf['metric'] = targetlabel
+    targetdf['nodename'] = list(g.nodes)
+    targetdf = targetdf.set_index('nodename')
+
+    return targetdf
 
 
 

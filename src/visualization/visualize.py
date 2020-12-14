@@ -142,7 +142,6 @@ def compute_topkperf(y_test, y_pred, margin):
     rank_pred = [1 if ind >= margin * V else 0 for ind in rank_pred]
     accuracy= accuracy_score(rank_test, rank_pred)
     f1score = f1_score(rank_test, rank_pred)
-
     return accuracy, f1score
 
 def get_topnaccuracy(y_testdf, y_pred, margin):
@@ -153,3 +152,12 @@ def plot_degree_dist(G):
     degrees = [G.degree(n) for n in G.nodes()]
     plt.hist(degrees)
     plt.show()
+
+
+def plot_base(tempax, xlabel, ylabel, figtitle):
+    tempax.xaxis.set_tick_params(labelsize=19)
+    tempax.yaxis.set_tick_params(labelsize=19)
+    tempax.set_ylabel(ylabel, fontsize=21)
+    tempax.set_xlabel(xlabel, fontsize=21)
+    tempax.set_title(figtitle, fontsize=22)
+

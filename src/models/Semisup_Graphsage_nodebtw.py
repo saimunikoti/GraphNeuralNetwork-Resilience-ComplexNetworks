@@ -27,10 +27,10 @@ from src.visualization import visualize as vs
 from src.features import build_features as bf
 import pickle
 
-## ########################################### build graph ###############################################
+## = ########################################### build graph ###############################################
 #%% ############################################################################################################
 
-G = StellarGraph.from_networkx(g, node_features="feature")
+G = StellarGraph.from_networkx(gest, node_features="feature")
 print(G.info())
 
 train_subjects, test_subjects = model_selection.train_test_split(targetdf, train_size=0.8, test_size=None)
@@ -46,9 +46,9 @@ test_targets = np.array(test_subjects)
 ## #################################### Graphsage Model building ###########################################
 #%% ############################################################################################################
 
-batch_size = 70
+batch_size = 40
 # number of nodes to consider for each hop
-num_samples = [15, 10, 5, 5]
+num_samples = [15, 10, 5]
 generator = GraphSAGENodeGenerator(G, batch_size, num_samples)
 
 train_gen = generator.flow(train_subjects.index, train_targets, shuffle=True)  # train_subjects.index for selecting training nodes
@@ -57,12 +57,12 @@ test_gen = generator.flow(test_subjects.index, test_targets)
 # aggregatortype = MaxPoolingAggregator(),
 # layer_sizes (list): Hidden feature dimensions for each layer. activations (list): Activations applied to each layer's output;
 
-graphsage_model = GraphSAGE(layer_sizes=[64, 32, 32, 16], generator=generator, aggregator = MaxPoolingAggregator,  activations=["relu","relu","relu","linear"],
-                            bias=True)
+graphsage_model = GraphSAGE(layer_sizes=[64, 32, 16], generator=generator, activations=["relu","relu","linear"],
+                            bias=True, dropout=0.0)
 
 x_inp, x_out = graphsage_model.in_out_tensors()
-# x_out1 = layers.Dense(units=20, activation="relu")(x_out)
-prediction = layers.Dense(units=train_targets.shape[1], activation="linear")(x_out)
+# x_out = layers.Dense(units=10, activation="relu")(x_out)
+prediction = layers.Dense(units=train_targets.shape[1], activation="softmax")(x_out)
 
 model = Model(inputs=x_inp, outputs=prediction)
 
@@ -70,12 +70,12 @@ model = Model(inputs=x_inp, outputs=prediction)
 #%% ############################################################################################################
 
 indices = bf.expandy(batch_size, 2)
+
 # def cat_loss(y_true, y_pred):
 #     return tf.keras.losses.categorical_crossentropy( y_true, y_pred, from_logits=False, label_smoothing=0)
 
 # @tf.function
 def noderankloss():
-
     def loss(y_true, y_pred):
         # tf.print(tf.gather(y_true, tf.constant(index[:, 0])))
 
@@ -233,12 +233,22 @@ def noderankloss():
 
 ##
 model.compile( optimizer=optimizers.Adam(), loss = noderankloss(), metrics=["acc"])
-model.compile( optimizer=optimizers.RMSprop(), loss="mean_squared_error", metrics=["acc"])
+model.compile( optimizer=optimizers.Adam(), loss="mean_squared_error", metrics=["acc"])
+model.compile( optimizer=optimizers.Adam(), loss=tf.keras.losses.CategoricalCrossentropy(), metrics=["acc"])
 
-filepath ='.\models\\Graphsage' + fileext + '_mse.h5'
+filepath ='.\models\\Graphsage' + fileext + '_clasf_unormranks.h5'
 mcp = ModelCheckpoint(filepath, save_best_only=True, monitor='val_loss', mode='min')
 
 history = model.fit(train_gen, epochs=30, validation_data=test_gen, callbacks=[mcp], verbose=2, shuffle=False)
 
-##
+all_nodes = targetdf.index
+all_mapper = generator.flow(all_nodes)
+y_pred = model.predict(all_mapper)
+
+ktau, p_value = stats.kendalltau(targetdf['metric'], y_pred)
+
+mc_predictions = []
+for i in tqdm.tqdm(range(100)):
+    y_p = model.predict(all_mapper)
+    mc_predictions.append(y_p)
 

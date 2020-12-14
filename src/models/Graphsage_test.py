@@ -55,7 +55,6 @@ def noderankloss(index):
     return loss
 
 ## load
-
 filepath ='.\models\\Graphsage' + fileext + '_rl_maxpool.h5'
 
 model = load_model(filepath, custom_objects={"MaxPoolingAggregator": MaxPoolingAggregator,'loss': noderankloss(indices)})
