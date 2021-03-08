@@ -1,4 +1,4 @@
-# Smart-Resilient-Urban-Utility-Networks
+# Graph Neural Network for Resilience in Complex Networks
 Data driven study of resiliency for interdependent urban utility networks.
 Following are the working plans for this novel study on the urban resiliency.
 
