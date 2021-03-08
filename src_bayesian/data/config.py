@@ -7,4 +7,3 @@ modelpath = projectpath + "\\models\\Graphsage\\"
 
 linkmodel = projectpath + "\\models\\Graphsage_link\\"
 
-

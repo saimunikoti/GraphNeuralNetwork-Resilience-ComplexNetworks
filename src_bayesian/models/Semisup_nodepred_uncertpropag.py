@@ -13,7 +13,7 @@ import pandas as pd
 import os
 from stellargraph import StellarGraph
 from stellargraph import mapper
-from stellargraph.mapper.sampled_node_generators import GraphSAGENodeGenerator
+from stellargraph.mapper.sampled_node_generators_bayesian import GraphSAGENodeGenerator
 from stellargraph.layer import GraphSAGE, MeanPoolingAggregator, MaxPoolingAggregator, MeanAggregator, AttentionalAggregator
 from tensorflow.keras import layers, optimizers, losses, metrics, Model, models
 from tensorflow.keras.callbacks import ModelCheckpoint, Callback

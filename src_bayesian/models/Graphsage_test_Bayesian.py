@@ -16,6 +16,7 @@ from src.visualization import visualize as vs
 from src.features import build_features as bf
 from tensorflow.keras.models import load_model
 import pickle
+import scipy.io as io
 
 ## ########################################### build graph ################################################
 #%% ############################################################################################################
@@ -26,8 +27,8 @@ print(G.info())
 #%% #################################### Graphsage Model loadig ###########################################
 #%% ############################################################################################################
 
-batch_size = 40
-num_samples = [15, 10, 5]
+batch_size = 70
+num_samples = [15, 10, 5, 5]
 generator = GraphSAGENodeGenerator(G, batch_size, num_samples)
 
 targets = np.array(targetdf['btw'])
@@ -54,10 +55,12 @@ def noderankloss(index):
         return temploss
     return loss
 
-## load
-filepath ='.\models\\Graphsage' + fileext + '_rl_maxpool.h5'
+## ====================== load model =======================
 
-model = load_model(filepath, custom_objects={"MaxPoolingAggregator": MaxPoolingAggregator,'loss': noderankloss(indices)})
+fileext = "\\plc_1000_egr_bayesian"
+filepath ='.\models\\BayesianGraphsage' + fileext + '_mse_3layers.h5'
+
+model = load_model(filepath, custom_objects={"MaxPoolingAggregator": MaxPoolingAggregator})
 #model = load_model(filepath, custom_objects={"MeanAggregator": MeanAggregator})
 
 ##%% #################################### Model Evaluation ######################################################
@@ -67,16 +70,28 @@ all_nodes = targetdf.index
 all_mapper = generator.flow(all_nodes)
 y_pred = model.predict(all_mapper)
 
-## kendall tau metric for rank
+## ================== Node embeddding ===================
 
-ktau, p_value = stats.kendalltau(targetdf['btw'], y_pred)
+embedding_model = Model(inputs=x_inp, outputs=x_out)
+emb = embedding_model.predict(all_mapper)
+
+# save embedding
+tempdic = {}
+tempdic['emb'] = emb
+filename = config.datapath + "processed"+ fileext+ "_embeddings.mat"
+
+io.savemat(filename, tempdic)
+
+## ==================== kendall tau metric for rank =============================
+
+ktau, p_value = stats.kendalltau(targetdf['metric'], y_pred)
 
 print("kendalls tau ", ktau)
 print("top k perfom")
 
 ## top k pf
 
-vs.compute_topkperf(targetdf['btw'], y_pred, 0.90)
+vs.compute_topkperf(targetdf['metric'], y_pred, 0.90)
 
 
 
