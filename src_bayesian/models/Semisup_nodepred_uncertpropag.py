@@ -6,25 +6,15 @@ config = tf.compat.v1.ConfigProto(gpu_options =
 config.gpu_options.allow_growth = True
 session = tf.compat.v1.Session(config=config)
 tf.compat.v1.keras.backend.set_session(session)
-from sklearn.metrics import accuracy_score
-from sklearn.metrics import precision_score, recall_score, f1_score, confusion_matrix
-import networkx as nx
-import pandas as pd
-import os
 from stellargraph import StellarGraph
-from stellargraph import mapper
 from stellargraph.mapper.sampled_node_generators_bayesian import GraphSAGENodeGenerator
-from stellargraph.layer import GraphSAGE, MeanPoolingAggregator, MaxPoolingAggregator, MeanAggregator, AttentionalAggregator
+from stellargraph.layer.graphsage_bayesian import GraphSAGE, MaxPoolingAggregator, MeanAggregator
 from tensorflow.keras import layers, optimizers, losses, metrics, Model, models
-from tensorflow.keras.callbacks import ModelCheckpoint, Callback
-from sklearn import preprocessing, feature_extraction, model_selection
-from stellargraph import datasets
+from tensorflow.keras.callbacks import ModelCheckpoint
+from sklearn import model_selection
 import numpy as np
 import tensorflow as tf
-import scipy.stats as stats
-from src.visualization import visualize as vs
 from src.features import build_features as bf
-import pickle
 from src.data import config
 
 ## ======================build graph ###############################################
@@ -32,7 +22,7 @@ from src.data import config
 G = StellarGraph.from_networkx(g, node_features="feature")
 print(G.info())
 
-train_subjects, test_subjects = model_selection.train_test_split(targetdf, train_size=0.1, test_size=None)
+train_subjects, test_subjects = model_selection.train_test_split(targetdf, train_size=0.8, test_size=None)
 
 train_targets = np.array(train_subjects)
 test_targets = np.array(test_subjects)
@@ -49,7 +39,7 @@ test_gen = generator.flow(test_subjects.index, test_targets)
 # layer_sizes (list): Hidden feature dimensions for each layer. activations (list): Activations applied to each layer's output;therethere isther
 
 graphsage_model = GraphSAGE(layer_sizes=[64, 32, 16], generator=generator, activations=["relu","relu","linear"],
-                            bias=True, aggregator=MaxPoolingAggregator,  dropout=0.0)
+                            bias=True, aggregator= MeanAggregator,  dropout=0.0)
 
 x_inp, x_out = graphsage_model.in_out_tensors()
 x_out = layers.Dense(units=10, activation="relu")(x_out)
@@ -226,8 +216,8 @@ def noderankloss(index):
 
 ##
 # model.compile( optimizer=optimizers.Adam(), loss = noderankloss(), metrics=["acc"])
-model.compile( optimizer=optimizers.Adam(), loss=noderankloss(indices), metrics=["acc"])
-model.compile( optimizer=optimizers.Adam(), loss="mean_squared_error", metrics=["acc"])
+# model.compile( optimizer=optimizers.Adam(), loss=noderankloss(indices), metrics=["acc"])
+model.compile( optimizer=optimizers.Adam(), loss="mean_squared_error", metrics=["acc"], run_eagerly=True)
 # model.compile( optimizer=optimizers.Adam(), loss=tf.keras.losses.Huber(delta=1.0), metrics=["acc"])
 # model.compile( optimizer=optimizers.Adam(), loss=tf.keras.losses.CategoricalCrossentropy(), metrics=["acc"])
 
@@ -295,9 +285,6 @@ history = model.fit(train_gen, epochs=2, validation_data=test_gen, callbacks=[mc
 #
 # with open(config.modelpath + fileext + "_results_2layer_hubber.pickle", 'wb') as b:
 #     pickle.dump(Result, b)
-
-
-
 
 
 
