@@ -38,7 +38,6 @@ from ..core.validation import require_integer_in_range, comma_sep
 from ..random import random_state
 from abc import ABC, abstractmethod
 
-
 def _default_if_none(value, default, name, ensure_not_none=True):
     value = value if value is not None else default
     if ensure_not_none and value is None:

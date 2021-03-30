@@ -45,6 +45,7 @@ from ..data import (
     DirectedBreadthFirstNeighbours,
 )
 from ..data.explorer_bayesian import SampledBreadthFirstWalk
+# from ..core.graph import StellarGraph, GraphSchema
 from ..core.graph import StellarGraph, GraphSchema
 from ..core.utils import is_real_iterable
 from ..core.validation import comma_sep
@@ -293,8 +294,12 @@ class GraphSAGENodeGenerator(BatchedNodeGenerator):
             self.graph.node_features(layer_nodes, node_type, use_ilocs=True)
             for layer_nodes in nodes_per_hop
         ]
+        # print("===========", len(batch_feats[0]), len(batch_feats[1]), len(batch_feats[2]), len(batch_feats[3] ))
 
-        # print("===========", (batch_feats[0]), len(batch_feats[2]) )
+        batch_feats_var = [self.graph.node_features_var(layer_nodes, node_type, use_ilocs=True)
+            for layer_nodes in nodes_per_hop ]
+
+        # print("===========", len(batch_feats_var[0]), len(batch_feats_var[1]), batch_feats_var[1], len(batch_feats_var[2]) )
 
         # Resize features to (batch_size, n_neighbours, feature_size)
         """ batch_feats = [(40,1,5),(40,15,5), (40,150,5),(40,750,5) ]"""
@@ -303,6 +308,15 @@ class GraphSAGENodeGenerator(BatchedNodeGenerator):
             np.reshape(a, (len(head_nodes), -1 if np.size(a) > 0 else 0, a.shape[1]))
             for a in batch_feats
         ]
+
+        print("===========", batch_feats[0].shape, batch_feats[1].shape, batch_feats[2].shape, batch_feats[3].shape )
+
+        # MODIFY BATCH FEAT VAR TO RSHAPE
+        batch_feats_var = [
+            np.reshape(a, (len(head_nodes), -1 if np.size(a) > 0 else 0, a.shape[1]))
+            for a in batch_feats_var
+        ]
+        print("===========",  batch_feats_var[0].shape, batch_feats_var[1].shape, batch_feats_var[2].shape, batch_feats_var[3].shape )
 
         # MODIFY TO GET NODES PER HOP TREE FROM HEAD NODES
         def get_nodetree(loc, lsize, samples_per_hop, walks):
@@ -335,7 +349,7 @@ class GraphSAGENodeGenerator(BatchedNodeGenerator):
 
         nodes_per_level = get_nodesperlevel_tree(nodes_per_level)
 
-        # ADDING PROBABILITIES OF LINKS FOR WEIGHT AGGREGATION
+        # fetching PROBABILITIES OF LINKS FOR WEIGHT AGGREGATION
 
         def get_neighprob(nodes_per_hop):
             prob_per_level = nodes_per_hop
@@ -381,6 +395,8 @@ class GraphSAGENodeGenerator(BatchedNodeGenerator):
         # print("===== nodes per hop ======", len(nodes_per_level), nodes_per_level[0], nodes_per_level[1][1,:])
 
         # print("===nodes per hop array", len(tempnodes_perhop), type(tempnodes_perhop[0]), tempnodes_perhop[0].shape )
+
+        batch_feats.extend(batch_feats_var)
         batch_feats.extend(nodesprob_per_hop)
 
         # print("======BATCH FEAT ======",len(batch_feats), len(batch_feats[0]), len(batch_feats[4]), len(batch_feats[7]))

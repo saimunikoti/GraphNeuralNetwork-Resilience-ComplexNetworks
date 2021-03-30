@@ -30,7 +30,7 @@ import warnings
 from .. import globalvar
 from .schema import GraphSchema, EdgeType
 from .experimental import experimental, ExperimentalWarning
-from .element_data import NodeData, EdgeData, ExternalIdIndex
+from .element_data_bayesian import NodeData, EdgeData, ExternalIdIndex
 from .utils import is_real_iterable
 from .validation import comma_sep, separated
 from . import convert
@@ -57,7 +57,7 @@ def extract_element_features(element_data, unique, name, ids, type, use_ilocs):
         ilocs = ids
     else:
         ilocs = element_data.ids.to_iloc(ids)
-
+    # print("====ilocs====", ilocs)
     valid = element_data.ids.is_valid(ilocs)
     all_valid = valid.all()
     valid_ilocs = ilocs if all_valid else ilocs[valid]
@@ -341,8 +341,6 @@ class StellarGraph:
         self,
         nodes=None,
         edges=None,
-        nodesvar=None,
-        edgesvar=None,
         *,
         is_directed=False,
         source_column=globalvar.SOURCE,
@@ -357,7 +355,6 @@ class StellarGraph:
         node_type_name=globalvar.TYPE_ATTR_NAME,
         edge_type_name=globalvar.TYPE_ATTR_NAME,
         node_features=None,
-        node_features_var = None,
     ):
         import networkx
 
@@ -396,22 +393,6 @@ class StellarGraph:
                 dtype=dtype,
             )
 
-            nodesvar, edgesvar = convert.from_networkx(
-                graph,
-                node_type_attr=node_type_name,
-                edge_type_attr=edge_type_name,
-                node_type_default=node_type_default,
-                edge_type_default=edge_type_default,
-                edge_weight_attr=edge_weight_column,
-                node_features=node_features_var,
-                dtype=dtype,
-            )
-
-
-        # print("=== nodes from networkx ====", type(nodes), nodes.items() )
-        # print("==nodes==", nodes)
-        # print("===nodes var===", nodesvar)
-
         if nodes is None:
             nodes_after_inference = self._infer_nodes_from_edges(
                 edges, source_column, target_column
@@ -424,7 +405,6 @@ class StellarGraph:
         self._is_directed = is_directed
 
         nodes_is_internal = isinstance(nodes, NodeData)
-
         edges_is_internal = isinstance(edges, EdgeData)
         any_internal = nodes_is_internal or edges_is_internal
 
@@ -432,7 +412,6 @@ class StellarGraph:
             internal_nodes = convert.convert_nodes(
                 nodes, name="nodes", default_type=node_type_default, dtype=dtype,
             )
-            # print("internal nodes===", internal_nodes)
 
             internal_edges = convert.convert_edges(
                 edges,
@@ -473,57 +452,6 @@ class StellarGraph:
         self._nodes = internal_nodes
         self._edges = internal_edges
 
-        #MODIFICATION
-        nodes_is_internal = isinstance(nodesvar, NodeData)
-        # print("nodes_is instance variance", nodes_is_internal)
-        edges_is_internal = isinstance(edgesvar, EdgeData)
-        any_internal = nodes_is_internal or edges_is_internal
-
-        if not any_internal:
-            internal_nodes_var = convert.convert_nodes(
-                nodesvar, name="nodes", default_type=node_type_default, dtype=dtype,
-            )
-            # print("internal nodes var ===", internal_nodes_var)
-
-            internal_edges_var = convert.convert_edges(
-                edgesvar,
-                name="edges",
-                default_type=edge_type_default,
-                source_column=source_column,
-                target_column=target_column,
-                weight_column=edge_weight_column,
-                type_column=edge_type_column,
-                nodes=internal_nodes,
-                dtype=dtype,
-            )
-        else:
-            if not edges_is_internal:
-                raise TypeError(
-                    f"edges: expected type 'EdgeData' when 'nodes' has type 'NodeData', found {type(edges).__name__}"
-                )
-            if not nodes_is_internal:
-                raise TypeError(
-                    f"nodes: expected type 'NodeData' when 'edges' has type 'EdgeData', found {type(nodes).__name__}"
-                )
-
-            params = locals()
-            for param, expected in self.__init__.__kwdefaults__.items():
-                if param == "is_directed":
-                    continue
-
-                if params[param] is not expected:
-                    raise ValueError(
-                        f"{param}: expected the default value ({expected!r}) when constructing from 'NodeData' and 'EdgeData', found {params[param]!r}. (All parameters except 'nodes', 'edges' and 'is_directed' must be left unset.)"
-                    )
-
-            internal_nodes_var = nodesvar
-            internal_edges_var = edgesvar
-
-            # FIXME: it would be good to do more validation that 'nodes' and 'edges' match here
-
-        self._nodes_var = internal_nodes_var
-        self._edges_var = internal_edges_var
-
     @staticmethod
     def _infer_nodes_from_edges(edges, source_column, target_column):
         # `convert_edges` nicely flags any errors in edges; inference here is lax rather than duplicate that
@@ -555,7 +483,6 @@ class StellarGraph:
         node_type_default=globalvar.NODE_TYPE_DEFAULT,
         edge_type_default=globalvar.EDGE_TYPE_DEFAULT,
         node_features=None,
-        node_features_var = None,
         dtype="float32",
     ):
         """
@@ -656,20 +583,9 @@ class StellarGraph:
             dtype=dtype,
         )
 
-        nodesvar, edgesvar = convert.from_networkx(
-            graph,
-            node_type_attr=node_type_attr,
-            edge_type_attr=edge_type_attr,
-            node_type_default=node_type_default,
-            edge_type_default=edge_type_default,
-            edge_weight_attr=edge_weight_attr,
-            node_features=node_features_var,
-            dtype=dtype,
-        )
-
         cls = StellarDiGraph if graph.is_directed() else StellarGraph
         return cls(
-            nodes=nodes, edges=edges, nodesvar= nodesvar, edgesvar=edgesvar, edge_weight_column=edge_weight_attr, dtype=dtype
+            nodes=nodes, edges=edges, edge_weight_column=edge_weight_attr, dtype=dtype
         )
 
     # customise how a missing attribute is handled to give better error messages for the NetworkX
@@ -1337,44 +1253,8 @@ class StellarGraph:
         Returns:
             Numpy array containing the node features for the requested nodes or node type.
         """
-        # print("self nodes====", len(self._nodes), type(self._nodes) )
         return extract_element_features(
             self._nodes, self.unique_node_type, "node", nodes, node_type, use_ilocs
-        )
-
-    def node_features_var(self, nodes=None, node_type=None, use_ilocs=False):
-        """
-        Get the numeric feature vectors for the specified nodes or node type.
-
-        For graphs with a single node type:
-
-        - ``graph.node_features()`` to retrieve features of all nodes, in the same order as
-          ``graph.nodes()``.
-
-        - ``graph.node_features(nodes=some_node_ids)`` to retrieve features for each node in
-          ``some_node_ids``.
-
-        For graphs with multiple node types:
-
-        - ``graph.node_features(node_type=some_type)`` to retrieve features of all nodes of type
-          ``some_type``, in the same order as ``graph.nodes(node_type=some_type)``.
-
-        - ``graph.node_features(nodes=some_node_ids, node_type=some_type)`` to retrieve features for
-          each node in ``some_node_ids``. All of the chosen nodes must be of type ``some_type``.
-
-        - ``graph.node_features(nodes=some_node_ids)`` to retrieve features for each node in
-          ``some_node_ids``. All of the chosen nodes must be of the same type, which will be
-          inferred. This will be slower than providing the node type explicitly in the previous example.
-
-        Args:
-            nodes (list or hashable, optional): Node ID or list of node IDs, all of the same type
-            node_type (hashable, optional): the type of the nodes.
-
-        Returns:
-            Numpy array containing the node features for the requested nodes or node type.
-        """
-        return extract_element_features(
-            self._nodes_var, self.unique_node_type, "node", nodes, node_type, use_ilocs
         )
 
     def edge_features(self, edges=None, edge_type=None, use_ilocs=False):
@@ -1990,6 +1870,7 @@ class StellarGraph:
         ilocs = np.intersect1d(source_edge_ilocs, target_edge_ilocs, assume_unique=True)
 
         return [float(x) for x in self._edges.weights[ilocs]]
+
 
 # A convenience class that merely specifies that edges have direction.
 class StellarDiGraph(StellarGraph):

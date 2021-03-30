@@ -23,7 +23,7 @@ import numpy as np
 import pandas as pd
 
 from ..globalvar import SOURCE, TARGET, WEIGHT, TYPE_ATTR_NAME
-from .element_data import NodeData, EdgeData
+from .element_data_bayesian import NodeData, EdgeData
 from .indexed_array import IndexedArray
 from .validation import comma_sep, require_dataframe_has_columns
 from .utils import (
@@ -252,9 +252,9 @@ def convert_nodes(data, *, name, default_type, dtype) -> NodeData:
         dtype=dtype,
     )
     ids, columns, type_info = converter.convert(data)
+    # print("type info ---", type_info)
     assert len(columns) == 0
     return NodeData(ids, type_info)
-
 
 DEFAULT_WEIGHT = np.float32(1)
 
@@ -454,8 +454,9 @@ def from_networkx(
     import networkx as nx
 
     nodes = defaultdict(_empty_node_info)
-
+    # print("nodes convert ==", nodes)
     features_in_node = isinstance(node_features, str)
+    # print("features in node==", features_in_node )
 
     for node_id, node_data in graph.nodes(data=True):
         node_type = node_data.get(node_type_attr, node_type_default)
@@ -463,6 +464,10 @@ def from_networkx(
         node_info.ids.append(node_id)
         if features_in_node:
             node_info.features.append(node_data.get(node_features, None))
+
+    # print("=========================================")
+    # print("nodes info  ==", len(node_info.ids ))
+    # print("nodes convert ==", len(node_info.features) )
 
     if features_in_node or node_features is None:
         node_frames = {

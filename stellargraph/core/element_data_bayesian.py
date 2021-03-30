@@ -136,7 +136,7 @@ class ElementData:
         type_sizes = []
 
         rows_so_far = 0
-
+        # print("==== type info from external ====", len(type_info), type(type_info), len(type_info[0]) )
         # validation
         for type_name, data in type_info:
             if not isinstance(data, np.ndarray):
@@ -158,8 +158,10 @@ class ElementData:
             all_types.append(type_name)
             type_sizes.append(stop - start)
             type_ranges[type_name] = range(start, stop)
-            print("type info====", type_name, data.shape)
+            # print("type info====", type_name, data.shape )
             features[type_name] = data
+
+        # print("features shape===", len(features), features.keys())
 
         if rows_so_far != len(ids):
             raise ValueError(
@@ -262,6 +264,7 @@ class ElementData:
             raise ValueError("unknown IDs")
 
     def feature_info(self):
+
         """
         Returns:
              A dictionary of type_name to a tuple of an integer representing the size of the
@@ -271,7 +274,6 @@ class ElementData:
             type_name: (type_features.shape[1:], type_features.dtype)
             for type_name, type_features in self._features.items()
         }
-
 
 class NodeData(ElementData):
     # nodes don't have extra functionality at the moment

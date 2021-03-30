@@ -237,6 +237,7 @@ class GraphSAGEAggregator(Layer):
         return weight
 
     def aggregate_neighbours(self, x_neigh, group_idx: int = 0):
+
         """
         Override with a method to aggregate tensors over neighbourhood.
 
@@ -266,9 +267,14 @@ class GraphSAGEAggregator(Layer):
         # otherwise create a simple layer.
         # MODIFYING INPUT FROM THE APPLY LAYER TO SEPAARTE XIN, NEIHG_IN FROM NODESPERHOP
         nodesperhop = inputs[-1]
+        # groupaggflag = nodesperhop[-1]
+        # print("hrGROUP agg flag =====", groupaggflag)
+        # nodesperhop = nodesperhop[:-1]
+
         inputs = inputs[0:2]
 
         sources = []
+        sources_var = []
 
         for ii, x in enumerate(inputs):
             # If the group is included, apply aggregation and collect the output tensor
@@ -278,16 +284,26 @@ class GraphSAGEAggregator(Layer):
                 x_agg = self.group_aggregate(x, nodesperhop, group_idx=ii)  # CALLS AGGREGATE FUNC WITH xgroup, groupindex
                 sources.append(x_agg)
 
+        # MODIFYING FOR XGROUPS FROM VARIANCE
+        for ii, x in enumerate(inputs):
+            if self.included_weight_groups[ii]:
+                x_agg_var = self.group_aggregate_var(x, nodesperhop, group_idx=ii)  # CALLS AGGREGATE FUNC WITH xgroup, groupindex
+                sources_var.append(x_agg_var)
+
         # Concatenate outputs from all groups
         # TODO: Generalize to sum a subset of groups.
         h_out = K.concatenate(sources, axis=2)
-
+        # print("shape h out", h_out.shape)
+        h_out_var = K.concatenate(sources_var, axis=2)
+        # print("shape h out var", h_out_var.shape)
         # Optionally add bias
         if self.has_bias:
             h_out = h_out + self.bias
+        if self.has_bias:
+            h_out_var = h_out_var + self.bias
 
         # Finally, apply activation and pass output to applylayer self._aggregation in 1000 line
-        return self.act(h_out)
+        return self.act(h_out), self.act(h_out_var)
 
     def compute_output_shape(self, input_shape):
         """
@@ -319,6 +335,20 @@ class GraphSAGEAggregator(Layer):
             "The GraphSAGEAggregator base class should not be directly instantiated"
         )
 
+    def group_aggregate_var(self, x_neigh, nodesperhop, group_idx=0):
+        """
+        Override with a method to aggregate tensors over the neighbourhood for each group.
+
+        Args:
+            x_neigh (tf.Tensor): : The input tensor representing the sampled neighbour nodes.
+            group_idx (int, optional): Group index.
+
+        Returns:
+            :class:`tensorflow.Tensor`: A tensor aggregation of the input nodes features.
+        """
+        raise NotImplementedError(
+            "The GraphSAGEAggregator base class should not be directly instantiated"
+        )
 
 class MeanAggregator(GraphSAGEAggregator):
     """
@@ -343,18 +373,7 @@ class MeanAggregator(GraphSAGEAggregator):
         Returns:
             :class:`tensorflow.Tensor`: A tensor aggregation of the input nodes features.
         """
-
-        # print("========= xgroup=====", x_group.shape)
-        # print("========= xgroup index=====", group_idx)
-        # print("========= nodesperhop =====", len(nodesprob_perhop), nodesprob_perhop[1].shape, nodesprob_perhop[-1].shape)
-
-        # MULTIPLYING PROB WITH NODE FEATURES
-        # x_group = x_group.numpy()
-        # print("=== type====", type(nodesprob_perhop), type(nodesprob_perhop[0]))
-        # print("=== x_group type====", type(x_group))
-
-        # x_group_new = tf.identity(x_group)
-
+        # find DEPTH FROM SO THAT CORRECT LINK PROBABILITY CAN BE ATTACHED TO NODE FEATURE VECTOR
         if x_group.shape[2] == 15:
             nodesprob_perhop_indices = 1
         elif x_group.shape[2] == 10:
@@ -366,7 +385,6 @@ class MeanAggregator(GraphSAGEAggregator):
         if group_idx == 0:
             x_agg = x_group
         else:
-            # print("x group depth", nodesprob_perhop_indices)
             for count in range(x_group.shape[-1]):
                 if count ==0:
                     # print("======= nodesperhopshape===", nodesprob_perhop[nodesprob_perhop_indices][:, :, :].shape, x_group[:, :, :, count].shape)
@@ -374,13 +392,50 @@ class MeanAggregator(GraphSAGEAggregator):
                     x_group_new = tf.expand_dims(x_group_new, -1)
                     # print("========= xgroup count shape =====", x_group_new.shape)
                 else:
-                    # x_group_new[:, :, :, count] = nodesprob_perhop[nodesprob_perhop_indices][:, :, :] * x_group[:, :, :, count]
+                    # ELEEMNT WISE MULTIPLICATION WILL ASSIGN PROBABILITY TO EACH FEATURE VECTOR
                     updates = nodesprob_perhop[nodesprob_perhop_indices][:, :, :] * x_group[:, :, :, count]
                     updates = tf.expand_dims(updates, -1)
-                    # indices = tf.constant([[0,]])
                     x_group_new = tf.concat([x_group_new, updates], -1)
-                    # x_group_new = tf.tensor_scatter_nd_update(x_group_new, indices, updates)
+                    # print("========= xgroup_new =====", x_group_new.shape, updates.shape)
 
+            x_agg = K.mean(x_group_new, axis=2)
+            # print("========= xagg shape =====", x_agg.shape)
+        return K.dot(x_agg, self.w_group[group_idx])
+
+    def group_aggregate_var(self, x_group, nodesprob_perhop, group_idx=0):
+        """
+        Mean aggregator for tensors over the neighbourhood for each group.
+
+        Args:
+            x_group (tf.Tensor): : The input tensor representing the sampled neighbour nodes.
+            group_idx (int, optional): Group index.
+
+        Returns:
+            :class:`tensorflow.Tensor`: A tensor aggregation of the input nodes features.
+        """
+        # find DEPTH FROM SO THAT CORRECT LINK PROBABILITY CAN BE ATTACHED TO NODE FEATURE VECTOR
+        if x_group.shape[2] == 15:
+            nodesprob_perhop_indices = 1
+        elif x_group.shape[2] == 10:
+            nodesprob_perhop_indices = 2
+        elif x_group.shape[2] == 5:
+            nodesprob_perhop_indices = 3
+
+        # The first group is assumed to be the self-tensor and we do not aggregate over it
+        if group_idx == 0:
+            x_agg = x_group
+        else:
+            for count in range(x_group.shape[-1]):
+                if count ==0:
+                    # print("======= nodesperhopshape===", nodesprob_perhop[nodesprob_perhop_indices][:, :, :].shape, x_group[:, :, :, count].shape)
+                    x_group_new = nodesprob_perhop[nodesprob_perhop_indices][:, :, :] * x_group[:, :, :, count]
+                    x_group_new = tf.expand_dims(x_group_new, -1)
+                    # print("========= xgroup count shape =====", x_group_new.shape)
+                else:
+                    # ELEEMNT WISE MULTIPLICATION WILL ASSIGN PROBABILITY TO EACH FEATURE VECTOR
+                    updates = nodesprob_perhop[nodesprob_perhop_indices][:, :, :] * x_group[:, :, :, count]
+                    updates = tf.expand_dims(updates, -1)
+                    x_group_new = tf.concat([x_group_new, updates], -1)
                     # print("========= xgroup_new =====", x_group_new.shape, updates.shape)
 
             x_agg = K.mean(x_group_new, axis=2)
@@ -1007,7 +1062,7 @@ class GraphSAGE:
     """ The __call__ method enables Python programmers to write classes where the 
     instances behave like functions and can be called like a function """
 
-    def __call__(self, xin: List, nodesperhop: List ):
+    def __call__(self, xin: List, xin_var: List, nodesperhop: List ):
         """
         Apply aggregator layers
 
@@ -1063,10 +1118,14 @@ class GraphSAGE:
                 # tempinput_x = [x[i], neigh_in ]
                 # print("======= new input x[i] ==== ", i, len(tempinput_x), tempinput_x[0].shape, tempinput_x[1][1].shape )
                 # Apply aggregator to head node and neighbour nodes
+                # flag = ["variance"]
+                # nodesperhop.extend(flag)
+                tempvarmean, tempvarvar = self._aggs[num_hops]([Dropout(self.dropout)(x[i]), neigh_in, nodesperhop])
+                # print("temp var===", (tempvarmean.shape), (tempvarvar.shape))
+                layer_out.append(tempvarmean) # iterate over x[] and neigh_in
 
-                layer_out.append(
-                    self._aggs[num_hops]([Dropout(self.dropout)(x[i]), neigh_in, nodesperhop]) # iterate over x[] and neigh_in
-                )
+            # temp_layer_out = [ind.shape for ind in layer_out]
+            # print("layer_out", (temp_layer_out))
 
             return layer_out
 
@@ -1080,25 +1139,47 @@ class GraphSAGE:
 
         # Form GraphSAGE layers iteratively
         h_layer = xin
-        # print("======= h_layer ==== ", len(h_layer))
+        print("======= h_layer ==== ", (h_layer[0].shape))
         for layer in range(0, self.max_hops):
             # tempprint = [ind.shape for ind in h_layer]
-            # print("======= xin ==== ", tempprint)
-            h_layer = apply_layer(h_layer, nodesperhop, layer)
+            # print("======= h_layer ==== ", tempprint)
+            # print("====hlayer===", len(h_layer) )
+            h_layer  = apply_layer(h_layer, nodesperhop, layer)
+
+        # MODIFY HLAYER VAR FROM GRAPHSAGE LAYERS ITERATIVELTY
+        h_layer_var = xin_var
+        # print("======= h_layer_var ==== ", (h_layer_var))
+        for layer in range(0, self.max_hops):
+            # tempprint = [ind.shape for ind in h_layer_var]
+            # print("======= h_layer ==== ", tempprint)
+            # print("====hlayer===", len(h_layer) )
+            h_layer_var = apply_layer(h_layer_var, nodesperhop, layer)
 
         # print("====================", len(xin), xin[0].shape, xin[-1].shape)
         # Remove neighbourhood dimension from output tensors of the stack
         # note that at this point h_layer contains the output tensor of the top (last applied) layer of the stack
 
+        # MODIFYING H_LAYER TO H_LAYER MEAN AS IT EXPORTS MEAN FEATURE VECTOR OF NODE AFTER PASSING THROUGH GS LAYERS
         h_layer = [
             Reshape(K.int_shape(x)[2:])(x) if K.int_shape(x)[1] == 1 else x
             for x in h_layer
         ]
+        # print("======= h_layer out ==== ", (h_layer))
+
+        h_layer_var = [
+            Reshape(K.int_shape(x)[2:])(x) if K.int_shape(x)[1] == 1 else x
+            for x in h_layer_var
+        ]
+        # print("======= h_layer_var out ==== ", (h_layer_var))
 
         return (
             self._normalization(h_layer[0])
             if len(h_layer) == 1
-            else [self._normalization(xi) for xi in h_layer]
+            else [self._normalization(xi) for xi in h_layer],
+
+            self._normalization(h_layer_var[0])
+            if len(h_layer_var) == 1
+            else [self._normalization(xi) for xi in h_layer_var]
         )
 
     def _node_model(self):
@@ -1116,6 +1197,9 @@ class GraphSAGE:
             Input(shape=(s, self.input_feature_size)) for s in self.neighbourhood_sizes
         ]
 
+        x_inp_var = [
+            Input(shape=(s, self.input_feature_size)) for s in self.neighbourhood_sizes
+        ]
         # MODIFYING X_INP SHAPE
         # x_inp=[]
         # for count in range(len(self.neighbourhood_sizes)+1):
@@ -1141,14 +1225,16 @@ class GraphSAGE:
         # probabilities of links connecting head nodes to neighbor nodes
         # nodes_inp = [Input(shape=(1,)), Input(shape=(15,)), Input(shape=(15,10)), Input(shape=(150,5)) ]
 
-        print("== x_inp nodes_inp ===", x_inp[0].shape, x_inp[-1].shape, nodes_inp[0].shape, nodes_inp[-1].shape)
+        print("**** x_inp nodes_inp *****", x_inp[0].shape, x_inp[-1].shape, nodes_inp[0].shape, nodes_inp[-1].shape)
         # Output from GraphSAGE model
-        x_out = self(x_inp, nodes_inp) # moves to __call__ function
-        print("=== xout===", x_out.shape)
+        x_outmean, x_outvar = self(x_inp, x_inp_var, nodes_inp) # moves to __call__ function
+        print("%%%%%% xout %%%%%%", x_outmean.shape)
+        # x_outvar = x_outmean
         # Returns inputs and outputs
+        x_inp.extend(x_inp_var)
         x_inp.extend(nodes_inp)
 
-        return x_inp, x_out
+        return x_inp, x_outmean, x_outvar
 
     def _link_model(self):
         """
