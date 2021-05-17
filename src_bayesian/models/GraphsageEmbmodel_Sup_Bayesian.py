@@ -50,13 +50,13 @@ model.summary()
 ##
 model.compile( optimizer=optimizers.RMSprop(), loss=tf.keras.losses.CategoricalCrossentropy(), metrics=["acc"])
 
-fileext = "\\plc_2000_egr_bayesian"
+fileext = "\\plc_5000_egr_bayesian"
 
 filepath ='.\models\\BayesianGraphsage' + fileext + '_supvisedemb.h5'
 
 mcp = ModelCheckpoint(filepath, save_best_only=True, monitor='val_loss', mode='min')
-
-history = model.fit(train_gen, epochs=60, validation_data = test_gen, callbacks=[mcp], verbose=2, shuffle=False)
+weights = {0:100, 1:10, 2:1}
+history = model.fit(train_gen, class_weight=weights, epochs=60, validation_data = test_gen, callbacks=[mcp], verbose=2, shuffle=False)
 
 ## ================== Node embeddding ===================
 sg.utils.plot_history(history)

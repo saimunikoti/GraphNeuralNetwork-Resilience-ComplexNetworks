@@ -65,7 +65,6 @@ egrranknorm = (egrdict - min(egrdict)) / (max(egrdict) - min(egrdict))
 Listlabelnew =[]
 Listlabelnew.append(egrranknorm)
 
-
 targetdf = bf.getgraphtargetdf(Listlabelnew, nodelist)
 plt.figure(1)
 plt.plot(targetdf['metric'])

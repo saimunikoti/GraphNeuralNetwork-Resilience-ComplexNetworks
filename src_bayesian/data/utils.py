@@ -746,6 +746,11 @@ def get_graphtxt(path):
     g = nx.read_edgelist(path, create_using=nx.DiGraph(), nodetype=int)
     return g
 
+def get_graphjson(filepath):
+    with open(filepath) as json_file:
+        data = json.load(json_file)
+    return data
+
 def get_weightsalloc(G):
     for u,v in G.edges():
         G[u][v]['weight'] = random.uniform(0, 1)

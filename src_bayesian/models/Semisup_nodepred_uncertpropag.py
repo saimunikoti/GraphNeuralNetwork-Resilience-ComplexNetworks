@@ -6,9 +6,11 @@ config = tf.compat.v1.ConfigProto(gpu_options =
 config.gpu_options.allow_growth = True
 session = tf.compat.v1.Session(config=config)
 tf.compat.v1.keras.backend.set_session(session)
-from stellargraph import StellarGraph
+
+from stellargraph.core.graph import StellarGraph
 from stellargraph.mapper.sampled_node_generators_bayesian import GraphSAGENodeGenerator
-from stellargraph.layer.graphsage_bayesian import GraphSAGE, MaxPoolingAggregator, MeanAggregator
+from stellargraph.layer.graphsage_bayesian import GraphSAGE, MaxPoolingAggregator, MeanAggregator, MeanAggregatorvariance
+
 from tensorflow.keras import layers, optimizers, losses, metrics, Model, models
 from tensorflow.keras.callbacks import ModelCheckpoint
 from sklearn import model_selection
@@ -16,6 +18,7 @@ import numpy as np
 import tensorflow as tf
 from src.features import build_features as bf
 from src.data import config
+from tensorflow.keras.models import load_model
 
 ## ======================build graph ###############################################
 
@@ -38,10 +41,11 @@ test_gen = generator.flow(test_subjects.index, test_targets)
 # aggregatortype = MaxPoolingAggregator(),
 # layer_sizes (list): Hidden feature dimensions for each layer. activations (list): Activations applied to each layer's output;therethere isther
 
-graphsage_model = GraphSAGE(layer_sizes=[64, 32, 16], generator=generator, activations=["relu","relu","linear"],
+graphsage_model = GraphSAGE(layer_sizes=[32, 32, 16], generator=generator, activations=["linear","linear","linear"],
                             bias=True, aggregator= MeanAggregator,  dropout=0.0)
 
 x_inp, x_out = graphsage_model.in_out_tensors()
+
 x_out = layers.Dense(units=10, activation="relu")(x_out)
 x_out = layers.Dense(units=10, activation="relu")(x_out)
 prediction = layers.Dense(units=train_targets.shape[1], activation="relu")(x_out)
@@ -224,12 +228,12 @@ model.compile( optimizer=optimizers.Adam(), loss="mean_squared_error", metrics=[
 filepath = config.modelpath + fileext + '_egrscoreranktest.h5'
 mcp = ModelCheckpoint(filepath, save_best_only=True, monitor='val_loss', mode='min')
 
-history = model.fit(train_gen, epochs=2, validation_data=test_gen, callbacks=[mcp], verbose=2, shuffle=False)
+history = model.fit(train_gen, epochs=20, validation_data=test_gen, callbacks=[mcp], verbose=2, shuffle=False)
 
-# from tensorflow.keras.models import load_model
 #
 # model = load_model(filepath, custom_objects={"MaxPoolingAggregator": MaxPoolingAggregator,"loss": noderankloss(indices)})
-# model = load_model(filepath, custom_objects={"MaxPoolingAggregator": MaxPoolingAggregator})
+model = load_model(filepath, custom_objects={"MeanAggregator": MeanAggregator})
+
 #
 # all_nodes = targetdf.index
 # all_mapper = generator.flow(all_nodes)
@@ -285,7 +289,4 @@ history = model.fit(train_gen, epochs=2, validation_data=test_gen, callbacks=[mc
 #
 # with open(config.modelpath + fileext + "_results_2layer_hubber.pickle", 'wb') as b:
 #     pickle.dump(Result, b)
-
-
-
 

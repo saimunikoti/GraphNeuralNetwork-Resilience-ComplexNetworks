@@ -226,5 +226,16 @@ def getgraphtargetdf(Listlabel, nodelist):
 
     return targetdf
 
+## get kth order neighbors
+
+def knbrs(G, start, k):
+    nbrs = set([start])
+    allnbrs = set()
+    for l in range(k):
+        nbrs = set((nbr for n in nbrs for nbr in G[n]))
+        for val in nbrs:
+            allnbrs.add(val)
+
+    return nbrs, allnbrs
 
 
