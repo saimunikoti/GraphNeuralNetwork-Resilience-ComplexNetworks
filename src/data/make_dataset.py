@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
 from scipy.stats import rankdata
-
+import random
 ## generate training data
 
 graphsizelist = [100, 200, 400, 400, 500, 500, 800, 800, 1000, 1000, 2000, 2000, 3000, 4000]
@@ -177,6 +177,12 @@ plt.close(1)
 
 for node_id, node_data in g.nodes(data=True):
     node_data["feature"] = [g.degree(node_id), nx.average_neighbor_degree(g, nodes=[node_id])[node_id], 1, 1,1]
+    # node_data["feature"] = [0.2, 0.033, 0.04, 0,0]
+
+## generate probability of edges
+for cn1,cn2 in g.edges:
+    g[cn1][cn2]['weight'] = np.round(random.uniform(0.5, 1),3)
 
 ##
+
 

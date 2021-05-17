@@ -5,7 +5,7 @@ from sklearn.metrics import accuracy_score
 from sklearn.metrics import precision_score, recall_score, f1_score, confusion_matrix
 import scipy.stats as stats
 from scipy.stats import rankdata
-
+from sklearn.manifold import TSNE
 
 ##### get performance metrics
 def getacuracy(y_true, y_pred):
@@ -170,7 +170,6 @@ def plot_degree_dist(G):
     plt.hist(degrees)
     plt.show()
 
-
 def plot_base(tempax, xlabel, ylabel, figtitle):
     tempax.xaxis.set_tick_params(labelsize=19)
     tempax.yaxis.set_tick_params(labelsize=19)
@@ -214,3 +213,25 @@ def gen_rankresults(margin, graphsizelist, y_test, y_pred):
        result[countgraph, 7] = sum(rank_pred[ind]) / len(ind)
 
     return result
+
+def get_tsnevisualization(vector, ndim):
+    X_embedded = TSNE(n_components=ndim).fit_transform(vector)
+    return X_embedded
+
+def plot_tsne_classwise(xembd, y_target):
+    y_target = np.array(y_target)
+    ytarget = np.array([np.where(y_target[ind]==1)[0] for ind in range(y_target.shape[0])])
+    class0_indices = np.where(ytarget==0)[0]
+    class1_indices = np.where(ytarget==1)[0]
+    class2_indices = np.where(ytarget==2)[0]
+
+    try:
+        ax = plt.axes(projection='3d')
+        ax.scatter3D(xembd[class0_indices,0], xembd[class0_indices,1], xembd[class0_indices,2], color="dodgerblue")
+        ax.scatter3D(xembd[class1_indices,0], xembd[class1_indices,1], xembd[class1_indices,2], color="violet")
+        ax.scatter3D(xembd[class2_indices,0], xembd[class2_indices,1], xembd[class2_indices,2], color="coral")
+    except:
+        plt.scatter(xembd[class0_indices,0], xembd[class0_indices,1], color="dodgerblue")
+        plt.scatter(xembd[class1_indices,0], xembd[class1_indices,1], color="purple")
+        plt.scatter(xembd[class2_indices,0], xembd[class2_indices,1], color="coral")
+

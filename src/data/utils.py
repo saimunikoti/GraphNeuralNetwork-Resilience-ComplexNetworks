@@ -11,6 +11,8 @@ from joblib import Parallel, delayed
 import time, math
 from tqdm import tqdm
 import random
+import pandas as pd
+
 ##
 class GenerateData():
     def __init__(self):
@@ -370,7 +372,8 @@ class GenEgrData():
         return egr_new
 
     def get_egrnoderank(self, g):
-
+        gcopy = g.copy()
+        # base = self.get_egr(gcopy)
         egr_new = np.zeros(len(g.nodes))
         for countnode, node in enumerate(g.nodes()):
             gcopy = g.copy()
@@ -748,7 +751,7 @@ def get_graphtxt(path):
 
 def get_weightsalloc(G):
     for u,v in G.edges():
-        G[u][v]['weight'] = random.uniform(0, 1)
+        G[u][v]['weight'] = random.uniform(0.50, 0.99)
     return G
 
 def get_graphfeaturelabel_syn(graphtype, metrictype, graphsizelist):
@@ -795,9 +798,14 @@ def get_weightedgraphfeaturelabel_syn(graphtype, metrictype, graphsizelist):
 
     return listgraph, listlabel
 
-def get_estgraphlabel(g, metrictype):
+def get_estgraphlabel(g, metrictype, weightflag):
     md = GenEgrData()
     rankslist=[]
+
+    ## get weight allocation
+    if weightflag==1:
+        g = get_weightsalloc(g)
+
     ## node rank on the basis of egr/weighted spectrum
     if metrictype == 'egr':
         ranks = md.get_egrnoderank(g)
@@ -867,6 +875,11 @@ def get_graphfeaturelabel_real(g, metrictype):
     ranks = (ranks - min(ranks)) / (max(ranks) - min(ranks))
 
     return g, ranks
+
+def get_jsondata(path):
+    with open(path) as json_file:
+        data = json.load(json_file)
+    return data
 
 ## paralllelization for loop
 #

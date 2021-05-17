@@ -5,6 +5,8 @@ datapath = projectpath + "\\data\\"
 
 modelpath = projectpath + "\\models\\Graphsage\\"
 
+Uncertprop_path = projectpath + "\\models\\Graphsage_Uncertprop\\"
+
 linkmodel = projectpath + "\\models\\Graphsage_link\\"
 
 
