@@ -1,5 +1,5 @@
 # Graph Neural Network for identification of critical nodes and links in large Complex Networks
-Graph machine learning based scalable framework for identifying critical nodes/links in a large social, biological and urban networks.
+Graph machine learning based scalable framework for identifying critical nodes/links in large social, biological and urban networks.
 
 ## Relevant papers
 
@@ -8,6 +8,6 @@ Graph machine learning based scalable framework for identifying critical nodes/l
 
 
 ## Contributors
-1. Dr. Bala
-2. Dr. Laya
-3. Sai Munikoti
+1. Dr. Bala Natarajan (Kansas State University, USA)
+2. Dr. Laya Das (Eth Zurich, Switzerland)
+3. Sai Munikoti (Kansas State University, USA)
