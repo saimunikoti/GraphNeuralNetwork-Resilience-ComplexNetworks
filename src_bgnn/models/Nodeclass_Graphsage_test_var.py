@@ -9,7 +9,7 @@ import time
 import argparse
 
 from src_bgnn.models.model_var import SAGE
-from src_bgnn.data.load_graph import load_plcgraph, inductive_split
+from src_bgnn.data.load_graph_test import load_plcgraph, inductive_split
 from src_bgnn.data import utils as ut
 from src_bgnn.data import config as cnf
 import pickle
@@ -19,8 +19,10 @@ from sklearn.metrics import confusion_matrix, accuracy_score, precision_score, r
 warnings.filterwarnings("ignore")
 from torch.serialization import SourceChangeWarning
 warnings.filterwarnings("ignore", category=SourceChangeWarning)
-
+import pandas as pd
+from sklearn.preprocessing import OneHotEncoder
 ##
+
 def compute_acc(pred, labels):
     """
     Compute the accuracy of prediction given the labels.
@@ -28,7 +30,7 @@ def compute_acc(pred, labels):
     labels = labels.long()
     return (th.argmax(pred, dim=1) == labels).float().sum() / len(pred)
 
-def evaluate_test(model, test_labels, device, dataloader, loss_fcn, model_weights):
+def evaluate_test(model, test_labels, device, dataloader, loss_fcn):
 
     """
     Evaluate the model on the given data set specified by ``val_nid``.
@@ -40,9 +42,7 @@ def evaluate_test(model, test_labels, device, dataloader, loss_fcn, model_weight
     """
     model.eval() # change the mode
 
-    test_acc = 0.0
     test_loss = 0.0
-    class1acc = 0.0
 
     for step, (input_nodes, seeds, blocks) in enumerate(dataloader):
         with th.no_grad():
@@ -56,13 +56,18 @@ def evaluate_test(model, test_labels, device, dataloader, loss_fcn, model_weight
             batch_pred = model(blocks, batch_inputs, g)
 
             temp_pred = th.argmax(batch_pred, dim=1)
-            current_acc = accuracy_score(batch_labels.cpu().detach().numpy(), temp_pred.cpu().detach().numpy() )
-            test_acc = test_acc + ((1 / (step + 1)) * (current_acc - test_acc))
 
-            cnfmatrix = confusion_matrix(batch_labels.cpu().detach().numpy(), temp_pred.cpu().detach().numpy())
-            class1acc = class1acc + ((1 / (step + 1)) * (cnfmatrix[0][0] / np.sum(cnfmatrix[0, :]) - class1acc))
+            # NLL metric
 
-            print(cnfmatrix)
+            # loss = nn.NLLLoss()
+            # output = loss(batch_pred, batch_labels)
+            # current_acc = accuracy_score(batch_labels.cpu().detach().numpy(), temp_pred.cpu().detach().numpy() )
+            # test_acc = test_acc + ((1 / (step + 1)) * (current_acc - test_acc))
+
+            # cnfmatrix = confusion_matrix(batch_labels.cpu().detach().numpy(), temp_pred.cpu().detach().numpy())
+            # class1acc = class1acc + ((1 / (step + 1)) * (cnfmatrix[0][0] / np.sum(cnfmatrix[0, :]) - class1acc))
+            #
+            # print(batch_pred[0:100])
 
             # correct = temp_pred.eq(batch_labels)
             # test_acc = test_acc + correct
@@ -72,7 +77,175 @@ def evaluate_test(model, test_labels, device, dataloader, loss_fcn, model_weight
 
     model.train() # rechange the model mode to training
 
-    return test_acc, test_loss, class1acc
+    return test_loss
+
+def evaluate_test_mc_old(model, test_labels, device, dataloader, loss_fcn, g, T):
+
+    """
+    Evaluate the model on the given data set specified by ``val_nid``.
+    g : The entire graph.
+    inputs : The features of all the nodes.
+    labels : The labels of all the nodes.
+    val_nid : the node Ids for validation.
+    device : The GPU device to evaluate on.
+    """
+
+    def apply_dropout(m):
+        if type(m) == nn.Dropout:
+            m.train()
+
+    model.eval() # change the mode
+    model.apply(apply_dropout)
+
+    test_loss = 0.0
+    batch_predc1 = []
+    batch_predc2 = []
+    batch_predc3 = []
+    mcensemble_loss = []
+
+    for countmc in range(T):
+
+        for step, (input_nodes, seeds, blocks) in enumerate(dataloader):
+
+            with th.no_grad():
+                # Load the input features of all the required input nodes as well as output labels of seeds node in a batch
+                batch_inputs, batch_labels = load_subtensor(test_nfeat, test_labels,
+                                                            seeds, input_nodes, device)
+
+                blocks = [block.int().to(device) for block in blocks]
+
+                # Compute loss and prediction
+                batch_pred = model(blocks, batch_inputs, g)
+
+                batch_predc1.append(batch_pred.cpu().detach().numpy()[0][0])
+                batch_predc2.append(batch_pred.cpu().detach().numpy()[0][1])
+                batch_predc3.append(batch_pred.cpu().detach().numpy()[0][2])
+
+                loss = loss_fcn(batch_pred, batch_labels)
+                mcensemble_loss.append(loss.cpu().detach().numpy())
+                test_loss = test_loss + ((1 / (step + 1)) * (loss.data - test_loss))
+
+            break
+        # model.train() # rechange the model mode to training
+        print("mc: ", countmc)
+
+    return batch_predc1, batch_predc2, batch_predc3, mcensemble_loss
+
+def evaluate_test_mc(model, test_labels, device, dataloader, loss_fcn, g, n_mcsim):
+
+    """
+    Evaluate the model on the given data set specified by ``val_nid``.
+    g : The entire graph.
+    inputs : The features of all the nodes.
+    labels : The labels of all the nodes.
+    val_nid : the node Ids for validation.
+    device : The GPU device to evaluate on.
+    """
+
+    def apply_dropout(m):
+        if type(m) == nn.Dropout:
+            m.train()
+
+    model.eval() # change the mode
+    model.apply(apply_dropout)
+
+    onehot_encoder = OneHotEncoder(sparse=False)
+    onehot_encoder.fit_transform(np.array([[0],[1],[2]]))
+
+    Resultsdf = pd.DataFrame()
+
+    sigmatot1_list = []
+    sigmatot2_list = []
+    sigmatot3_list = []
+
+    Nll1_list = []
+    Nll2_list = []
+    Nll3_list = []
+
+    truec1_list = []
+    truec2_list = []
+    truec3_list = []
+
+    loss_list = []
+
+    filepath = cnf.modelpath + "Resultsdf_meanpred_var5-4.xlsx"
+    meandf = pd.read_excel(filepath)
+    diffmeanc1 = meandf['diffMean_c1']
+    diffmeanc2 = meandf['diffMean_c2']
+    diffmeanc3 = meandf['diffMean_c3']
+
+    for step, (input_nodes, seeds, blocks) in enumerate(dataloader):
+        predc1 = []
+        predc2 = []
+        predc3 = []
+        tloss = []
+
+        for countmc in range(n_mcsim):
+
+            with th.no_grad():
+                # Load the input features of all the required input nodes as well as output labels of seeds node in a batch
+                batch_inputs, batch_labels = load_subtensor(test_nfeat, test_labels,
+                                                            seeds, input_nodes, device)
+
+                blocks = [block.int().to(device) for block in blocks]
+
+                # Compute loss and prediction
+                batch_pred = model(blocks, batch_inputs, g)
+
+                predc1.append(batch_pred.cpu().detach().numpy()[0][0])
+                predc2.append(batch_pred.cpu().detach().numpy()[0][1])
+                predc3.append(batch_pred.cpu().detach().numpy()[0][2])
+
+                loss = loss_fcn(batch_pred, batch_labels)
+                tloss.append(loss.item())
+                # test_loss = test_loss + ((1 / (step + 1)) * (loss.data - test_loss))
+
+            print("node-mcit", step, countmc)
+
+        # model.train() # rechange the model mode to training
+        sigmatot1_list.append(np.mean(predc1) + diffmeanc1[step])
+        sigmatot2_list.append(np.mean(predc2) + diffmeanc2[step])
+        sigmatot3_list.append(np.mean(predc3) + diffmeanc3[step])
+
+        temp_label = np.reshape(batch_labels.cpu().detach().numpy(), (1, 1))
+        truec1_list.append(onehot_encoder.transform(temp_label)[0][0])
+        truec2_list.append(onehot_encoder.transform(temp_label)[0][1])
+        truec3_list.append(onehot_encoder.transform(temp_label)[0][2])
+
+        loss_list.append(np.mean(tloss))
+
+        nll_calc_c1 = (0.5 * np.log(np.abs(sigmatot1_list[-1])))+(1 / (2 * sigmatot1_list[-1]) *
+                                                    np.square(meandf['ytrue_c1'][step] - meandf['ypred_c1'][step]))
+        Nll1_list.append(nll_calc_c1)
+        nll_calc_c2 = (0.5 * np.log(np.abs(sigmatot2_list[-1]))) + (1 / (2 * sigmatot2_list[-1]) *
+                                                    np.square(meandf['ytrue_c2'][step] - meandf['ypred_c2'][step]))
+        Nll2_list.append(nll_calc_c2)
+        nll_calc_c3 = (0.5 * np.log(np.abs(sigmatot3_list[-1]))) + (1 / (2 * sigmatot3_list[-1]) *
+                                                    np.square(meandf['ytrue_c3'][step] - meandf['ypred_c3'][step]))
+        Nll3_list.append(nll_calc_c3)
+
+    Resultsdf['ypred_c1'] = meandf['ypred_c1']
+    Resultsdf['ypred_c2'] = meandf['ypred_c2']
+    Resultsdf['ypred_c3'] = meandf['ypred_c3']
+
+    Resultsdf['ytrue_c1'] = truec1_list
+    Resultsdf['ytrue_c2'] = truec2_list
+    Resultsdf['ytrue_c3'] = truec3_list
+
+    Resultsdf['nll_c1'] = Nll1_list
+    Resultsdf['nll_c2'] = Nll2_list
+    Resultsdf['nll_c3'] = Nll3_list
+
+    Resultsdf['predloss'] = meandf['predloss']
+
+    Resultsdf['varloss'] = loss_list
+
+    Resultsdf['sigmatot_c1'] = sigmatot1_list
+    Resultsdf['sigmatot_c2'] = sigmatot2_list
+    Resultsdf['sigmatot_c3'] = sigmatot3_list
+
+    filepath = cnf.modelpath + "Resultsdf_varpred_var5-4.xlsx"
+    Resultsdf.to_excel(filepath, index=False)
 
 def load_subtensor(nfeat, labels, seeds, input_nodes, device):
     """
@@ -95,41 +268,64 @@ def load_ckp(checkpoint_fpath, model, optimizer):
     valid_loss_min = checkpoint['valid_loss_min']
     return model, valid_loss_min.item()
 
+def get_acc_nll(filepath):
+
+    Results_df = pd.read_excel(filepath)
+
+    temp_col_pred = Results_df.apply(
+        lambda row: np.argmax(np.array([row['ypred_c1'], row['ypred_c2'], row['ypred_c3']] ) ),
+        axis=1
+    )
+    temp_col_true = Results_df.apply(
+        lambda row: np.argmax(np.array([row['ytrue_c1'], row['ytrue_c2'], row['ytrue_c3']] ) ),
+        axis=1
+    )
+    Results_df['class_pred'] = temp_col_pred
+    Results_df['class_true'] = temp_col_true
+    Avg_NLL = 0.0
+    Accuracy = accuracy_score(Results_df['class_true'], Results_df['class_pred'])
+    # Avg_NLL = np.mean([np.mean(Results_df['nll_c1']), np.mean(Results_df['nll_c2']), np.mean(Results_df['nll_c3'])] )
+    Avg_PredLoss = np.mean(Results_df['predloss'])
+
+    return Results_df, Accuracy, Avg_NLL, Avg_PredLoss
+
+filepath = cnf.modelpath + "Resultsdf_meanpred_var2-5.xlsx"
+Results_df, Accuracy, Avg_NLL, Avg_PredLoss = get_acc_nll(filepath)
+
 #### Entry point
-def run(args, device, data, checkpoint_path, best_model_path):
+
+def run(args, device, data, best_model_path):
 
     # Unpack data
+    n_classes, test_g, test_nfeat, test_labels, g = data
 
-    n_classes, train_g, val_g, test_g, train_nfeat, train_labels, \
-    val_nfeat, val_labels, test_nfeat, test_labels = data
+    in_feats = test_nfeat.shape[1]
 
-    in_feats = train_nfeat.shape[1]
+    test_nid = th.nonzero(test_g.ndata['test_mask'], as_tuple=True)[0]
 
-    train_nid = th.nonzero(train_g.ndata['train_mask'], as_tuple=True)[0]
+    # val_nid = th.nonzero(val_g.ndata['val_mask'], as_tuple=True)[0]
 
-    val_nid = th.nonzero(val_g.ndata['val_mask'], as_tuple=True)[0]
-
-    test_nid = th.nonzero(~(test_g.ndata['train_mask'] | test_g.ndata['val_mask']), as_tuple=True)[0]
+    # test_nid = th.nonzero(~(test_g.ndata['train_mask'] | test_g.ndata['val_mask']), as_tuple=True)[0]
+    # test2_nid = th.nonzero(test2_g.ndata['test2_mask'], as_tuple=True)[0]
 
     dataloader_device = th.device('cpu')
-
     if args.sample_gpu:
-        train_nid = train_nid.to(device)
+        test_nid = test_nid.to(device)
         # copy only the csc to the GPU
-        train_g = train_g.formats(['csc'])
-        train_g = train_g.to(device)
+        test_g = test_g.formats(['csc'])
+        test_g = test_g.to(device)
         dataloader_device = device
 
     # define dataloader function
-    def get_dataloader(train_g, train_nid, sampler):
+    def get_dataloader(test_g, test_nid, sampler):
 
         dataloader = dgl.dataloading.NodeDataLoader(
-            train_g,
-            train_nid,
+            test_g,
+            test_nid,
             sampler,
             device=dataloader_device,
             batch_size=args.batch_size,
-            shuffle=True,
+            shuffle=False,
             drop_last=False,
             num_workers=args.num_workers)
 
@@ -140,16 +336,13 @@ def run(args, device, data, checkpoint_path, best_model_path):
 
     model = model.to(device)
 
-    weights = [17, 1]
-    class_weights = th.FloatTensor(weights).to(device)
-    loss_fcn = nn.CrossEntropyLoss(weight=class_weights)
+    # weights = [17, 1]
+    # class_weights = th.FloatTensor(weights).to(device)
+    loss_fcn = nn.CrossEntropyLoss()
 
     optimizer = optim.Adam(model.parameters(), lr=args.lr)
 
-    ckp_path = cnf.modelpath + "\\current_checkpoint.pt"
-    model, valid_loss_min = load_ckp(ckp_path, model, optimizer)
-
-    model_weights = [p for p in model.parameters() if p.requires_grad]
+    model, valid_loss_min = load_ckp(best_model_path, model, optimizer)
 
     print("model = ", model)
     print("optimizer = ", optimizer)
@@ -163,24 +356,39 @@ def run(args, device, data, checkpoint_path, best_model_path):
 
     model.eval()
 
-    test_acc, test_loss, class1acc = evaluate_test(model, test_labels, device, dataloader, loss_fcn)
+    # test_loss = evaluate_test(model, test_labels, device, dataloader, loss_fcn)
 
-    print('Test acc: {:.6f} \tClass1acc: {:.6f} \tTess Loss: {:.6f}'.format(test_acc, class1acc, test_loss))
+    evaluate_test_mc(model, test_labels, device, dataloader, loss_fcn, g, 100)
+
+    # print('Tess Loss: {:.6f}'.format(mcensemble_loss))
+
+    # Resultsdf = pd.DataFrame(
+    #     columns=['mcensemble_acc', 'mcensemble_loss'])
+    #
+    # Resultsdf['mcensemble_predc1'] = batch_predc1
+    # Resultsdf['mcensemble_predc2'] = batch_predc2
+    # Resultsdf['mcensemble_predc3'] = batch_predc3
+    #
+    # Resultsdf['mcensemble_loss'] = mcensemble_loss
+    #
+    # filepath = cnf.modelpath + "Resultsdf_mcensemblevar_s1c2_var2.xlsx"
+    # Resultsdf.to_excel(filepath, index=False)
 
     # variance of predictions
 
     # print('Avg epoch time: {}'.format(avg / (epoch - 4)))
 
 if __name__ == '__main__':
+    th.manual_seed(42)
     argparser = argparse.ArgumentParser()
     argparser.add_argument('--gpu', type=int, default=0,
                            help="GPU device ID. Use -1 for CPU training")
     argparser.add_argument('--dataset', type=str, default='PLC')
-    argparser.add_argument('--num-epochs', type=int, default= 120)
-    argparser.add_argument('--num_hidden', type=int, default=64)
+    argparser.add_argument('--num-epochs', type=int, default= 100)
+    argparser.add_argument('--num_hidden', type=int, default=48)
     argparser.add_argument('--num-layers', type=int, default=3)
-    argparser.add_argument('--fan-out', type=str, default='10,15,10')
-    argparser.add_argument('--batch-size', type=int, default=10700)
+    argparser.add_argument('--fan-out', type=str, default='8,10,8')
+    argparser.add_argument('--batch-size', type=int, default=1)
     argparser.add_argument('--log-every', type=int, default=20)
     argparser.add_argument('--eval-every', type=int, default=5)
     argparser.add_argument('--lr', type=float, default=0.001)
@@ -204,38 +412,35 @@ if __name__ == '__main__':
     else:
         device = th.device('cpu')
 
-    filepath = cnf.datapath + '\\plc_600_egr' + ".gpickle"
     # changes
     if args.dataset == 'PLC':
-        g, n_classes = load_plcgraph(filepath=filepath, train_ratio=0.75, valid_ratio=0.15)
-
+        g, n_classes = load_plcgraph()
     else:
         raise Exception('unknown dataset')
 
     # if args.inductive:
-    train_g, val_g, test_g = inductive_split(g)
+    test_g = inductive_split(g)
 
-    train_nfeat = train_g.ndata.pop('features')
-    val_nfeat = val_g.ndata.pop('features')
+    # train_nfeat = train_g.ndata.pop('features')
+    # val_nfeat = val_g.ndata.pop('features')
     test_nfeat = test_g.ndata.pop('features')
-    train_labels = train_g.ndata.pop('labels')
-    val_labels = val_g.ndata.pop('labels')
+    # test2_nfeat = test2_g.ndata.pop('features')
+    # train_labels = train_g.ndata.pop('labels')
+    # val_labels = val_g.ndata.pop('labels')
     test_labels = test_g.ndata.pop('labels')
+    # test2_labels = test2_g.ndata.pop('labels')
 
-    print("no of train, val nodes, test:", train_nfeat.shape, val_nfeat.shape, test_nfeat.shape)
-
-    # else:
-    #     train_g = val_g = test_g = g
-    #     train_nfeat = val_nfeat = test_nfeat = g.ndata.pop('features')
-    #     train_labels = val_labels = test_labels = g.ndata.pop('labels')
+    print("test graph size :", test_nfeat.shape)
 
     if not args.data_cpu:
-        train_nfeat = train_nfeat.to(device)
-        train_labels = train_labels.to(device)
+        test_nfeat = test_nfeat.to(device)
+        test_labels = test_labels.to(device)
 
     # Pack data
-    data = n_classes, train_g, val_g, test_g, train_nfeat, train_labels, \
-           val_nfeat, val_labels, test_nfeat, test_labels
+    data = n_classes, test_g, test_nfeat, test_labels, g
 
-    run(args, device, data, cnf.modelpath + "\\current_checkpoint.pt", cnf.modelpath + "\\plc_10.7k.pt")
+    start_time = time.time()
+    run(args, device, data, cnf.modelpath + "\\pubmed_uc.pt")
+    end_time = time.time()-start_time
 
+    print("total time", end_time)

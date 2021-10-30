@@ -20,12 +20,12 @@ class SAGE(nn.Module):
         self.layers = nn.ModuleList()
 
         if n_layers > 1:
-            self.layers.append(dglnn.SAGEConv_var(in_feats, hidden_dim, aggregator_type= 'mean') )
+            self.layers.append(dglnn.SAGEConv_mean(in_feats, hidden_dim, aggregator_type= 'mean') )
             for i in range(1, n_layers - 1):
-                self.layers.append(dglnn.SAGEConv_var(hidden_dim, hidden_dim, aggregator_type='mean' ))
-            self.layers.append(dglnn.SAGEConv_var(hidden_dim, hidden_dim, aggregator_type='mean' ))
+                self.layers.append(dglnn.SAGEConv_mean(hidden_dim, hidden_dim, aggregator_type='mean' ))
+            self.layers.append(dglnn.SAGEConv_mean(hidden_dim, hidden_dim, aggregator_type='mean' ))
         else:
-            self.layers.append(dglnn.SAGEConv_var(in_feats, n_classes, aggregator_type='mean'))
+            self.layers.append(dglnn.SAGEConv_mean(in_feats, n_classes, aggregator_type='mean'))
 
         self.fc1 = nn.Linear(hidden_dim, n_classes)
         # self.bn1 = nn.BatchNorm1d(num_features=5)
@@ -38,6 +38,7 @@ class SAGE(nn.Module):
         h = x
         for l, (layer, block) in enumerate(zip(self.layers, blocks)):
             batch_block_nodes = []
+
             for count in range(100000):
                 try:
                     batch_block_nodes.append(block.dstnodes[count][0]['_ID'].item())
@@ -53,11 +54,12 @@ class SAGE(nn.Module):
             # if l != len(self.layers) - 1:
                 # h = self.bn2(h)
             # h = self.activation(h)
+
             h = self.dropout(h)
 
-        dense_weight = th.square(self.fc1.weight)
-        h = th.matmul(h, th.transpose(dense_weight, 0, 1))
-        # h = self.fc1(h)
+        # dense_weight = th.square(self.fc1.weight)
+        # h = th.matmul(h, th.transpose(dense_weight, 0, 1))
+        h = self.fc1(h)
 
         return h
 

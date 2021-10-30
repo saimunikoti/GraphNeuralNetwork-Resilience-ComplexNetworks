@@ -20,7 +20,7 @@ class SAGE(nn.Module):
         self.layers = nn.ModuleList()
 
         if n_layers > 1:
-            self.layers.append(dglnn.SAGEConv_var(in_feats, hidden_dim, aggregator_type= 'mean') )
+            self.layers.append(dglnn.SAGEConv_var(in_feats, hidden_dim, aggregator_type='mean') )
             for i in range(1, n_layers - 1):
                 self.layers.append(dglnn.SAGEConv_var(hidden_dim, hidden_dim, aggregator_type='mean' ))
             self.layers.append(dglnn.SAGEConv_var(hidden_dim, hidden_dim, aggregator_type='mean' ))
@@ -37,6 +37,7 @@ class SAGE(nn.Module):
     def forward(self, blocks, x, g):
         h = x
         for l, (layer, block) in enumerate(zip(self.layers, blocks)):
+
             batch_block_nodes = []
             for count in range(100000):
                 try:

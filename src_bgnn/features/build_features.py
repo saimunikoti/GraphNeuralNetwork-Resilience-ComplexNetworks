@@ -247,6 +247,7 @@ def get_feature_meanandvariance(g, listgraph):
             except:
                 pass
 
+        # meandic[node] = np.mean(np.array(templist), axis=0)
         meandic[node] = np.sum(np.array(templist), axis=0)/len(listgraph)
         vardic[node] = np.var(np.array(templist), axis=0)
 

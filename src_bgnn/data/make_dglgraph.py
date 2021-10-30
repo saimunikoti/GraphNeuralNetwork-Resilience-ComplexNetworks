@@ -19,7 +19,7 @@ Listlabel.append(ut.get_estgraphlabel(g, "egr", weightflag=1))
 
 ## generate Multiple graphs and labels for egr
 
-graphsizelist = [800, 800, 1000, 1000, 1400]
+graphsizelist = [100, 200, 400, 400, 500, 500, 800, 800, 1000, 1000, 2000, 2000, 3000, 4000]
 
 fileext = "\plc_"+ str(sum(graphsizelist))
 
@@ -35,18 +35,21 @@ for countg in Listgraph:
 # combine graphs into one disjoint union graph
 g = bf.combine_graphs(Listgraph)
 
-with open(cnf.datapath + fileext + "_label.pickle", 'wb') as b:
-     pickle.dump(Listlabel,b)
+with open(cnf.datapath + fileext + "_Listgraph.pickle", 'wb') as b:
+    pickle.dump(Listgraph, b)
+
+with open(cnf.datapath + fileext + "_Listlabel.pickle", 'wb') as b:
+     pickle.dump(Listlabel, b)
 
 ## ================ load graph and node-labels ==============
 
-fileext = "\\plc_10700"
+fileext = "\\plc_16700"
 g = nx.read_gpickle(cnf.datapath + fileext + ".gpickle")
 
-with open(cnf.datapath + fileext + "_listgraph.pickle", 'rb') as b:
+with open(cnf.datapath + fileext + "_Listgraph.pickle", 'rb') as b:
     Listgraph = pickle.load(b)
 
-with open(cnf.datapath + fileext + "_label.pickle", 'rb') as b:
+with open(cnf.datapath + fileext + "_Listlabel.pickle", 'rb') as b:
     Listlabel = pickle.load(b)
 
 g = Listgraph[0]
@@ -60,7 +63,7 @@ nodelist = list(np.arange(0, len(g.nodes)))
 
 targetdf = bf.getgraphtargetdf(Listlabel, nodelist)
 
-category = pd.cut(targetdf.metric,  bins=[0.0,0.7,1.0], labels=[0, 1], include_lowest=True)
+category = pd.cut(targetdf.metric,  bins=[0.0,0.3,0.7,1.0], labels=[0,1,2], include_lowest=True)
 targetdf['metric'] = category
 plt.hist(targetdf['metric'])
 
@@ -96,6 +99,15 @@ filepath = cnf.datapath + fileext + ".gpickle"
 
 nx.write_gpickle(g, filepath)
 
+## Generate random instances of graph
+
+Listgraph = bf.generate_multiple_graphinstance(g, 10000)
+
+fileext = "\plc_10700_instances"
+
+with open(cnf.datapath + fileext + ".pickle", 'wb') as b:
+    pickle.dump(Listgraph, b)
+
 ## GENERATE VARIANCE of each node feature
 
 fileext = "\plc_10700_instances"
@@ -109,8 +121,9 @@ for node_id, node_data in g.nodes(data=True):
     node_data["meanfeature"] = Meandic[node_id].tolist()
     node_data["varfeature"] = Vardic[node_id].tolist()
 
-# save g with mean and variance feature and node labes
+# save g with mean and variance feature and node labels
 
+fileext = "\\plc_10700"
 filepath = cnf.datapath + fileext + ".gpickle"
 
 nx.write_gpickle(g, filepath)

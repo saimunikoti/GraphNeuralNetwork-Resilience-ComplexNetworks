@@ -15,7 +15,7 @@ import random
 
 # graphsizelist = [100, 200, 400, 400, 500, 500, 800, 800, 1000, 1000, 2000, 2000, 3000, 4000]
 # graphsizelist = [ 200, 300, 500, 500, 600, 600, 700, 700, 800, 800]
-graphsizelist = [4000]
+graphsizelist = [10700]
 
 fileext = "\plc_"+ str(sum(graphsizelist))
 
@@ -160,6 +160,7 @@ for countlist in Listlabel:
     Listranks.append(egrranknorm)
 
 ## generate target vector for syn graph
+
 nodelist = np.arange(0, len(g.nodes))
 targetdf = bf.getgraphtargetdf(Listranks, nodelist)
 plt.figure(1)
@@ -183,6 +184,7 @@ for node_id, node_data in g.nodes(data=True):
     # node_data["feature"] = [0.2, 0.033, 0.04, 0,0]
 
 ## generate probability of edges
+
 for cn1,cn2 in g.edges:
     g[cn1][cn2]['weight'] = np.round(random.uniform(0.5, 1),3)
 

@@ -9,7 +9,8 @@ import time
 import argparse
 
 from src_bgnn.models.model import SAGE
-from src_bgnn.data.load_graph import load_plcgraph, inductive_split
+# from src_bgnn.models.model_mean import SAGE
+from src_bgnn.data.load_graph_train import load_plcgraph, inductive_split
 from src_bgnn.data import utils as ut
 from src_bgnn.data import config as cnf
 import pickle
@@ -47,7 +48,7 @@ def evaluatev0(model, g, nfeat, labels, val_nid, device):
 
     return compute_acc(pred[val_nid], labels[val_nid].to(pred.device))
 
-def evaluate(model, test_nfessat, test_labels, device, dataloader, loss_fcn):
+def evaluate(model, test_nfeat, test_labels, device, dataloader, loss_fcn):
 
     """
     Evaluate the model on the given data set specified by ``val_nid``.
@@ -87,6 +88,7 @@ def evaluate(model, test_nfessat, test_labels, device, dataloader, loss_fcn):
             # test_acc = test_acc + correct
 
             loss = loss_fcn(batch_pred, batch_labels)
+
             test_loss = test_loss + ((1 / (step + 1)) * (loss.data - test_loss))
 
     model.train() # rechange the model mode to training
@@ -114,13 +116,32 @@ def load_ckp(checkpoint_fpath, model, optimizer):
     valid_loss_min = checkpoint['valid_loss_min']
     return model, valid_loss_min.item()
 
+def weighted_binary_cross_entropy(output, target, weights=None):
+
+    if weights is not None:
+        assert len(weights) == 2
+
+        output = th.clamp(output, min=1e-8, max=1 - 1e-8)
+
+        loss = weights[1] * (target * th.log(output)) + \
+               weights[0] * ((1 - target) * th.log(1 - output))
+    else:
+        loss = target * th.log(output) + (1 - target) * th.log(1 - output)
+
+    return th.neg(th.mean(loss))
+
+# weights = [15, 10, 1]
+
 #### Entry point
+
 def run(args, device, data, checkpoint_path, best_model_path):
 
     # Unpack data
+    # train_losslist = []
+    # val_losslist = []
 
-    n_classes, train_g, val_g, test_g, train_nfeat, train_labels, \
-    val_nfeat, val_labels, test_nfeat, test_labels, g = data
+    n_classes, train_g, val_g, train_nfeat, train_labels, \
+    val_nfeat, val_labels, g = data
 
     in_feats = train_nfeat.shape[1]
 
@@ -128,7 +149,7 @@ def run(args, device, data, checkpoint_path, best_model_path):
 
     val_nid = th.nonzero(val_g.ndata['val_mask'], as_tuple=True)[0]
 
-    test_nid = th.nonzero(~(test_g.ndata['train_mask'] | test_g.ndata['val_mask']), as_tuple=True)[0]
+    # test_nid = th.nonzero(~(test_g.ndata['train_mask'] | test_g.ndata['val_mask']), as_tuple=True)[0]
 
     dataloader_device = th.device('cpu')
 
@@ -161,10 +182,11 @@ def run(args, device, data, checkpoint_path, best_model_path):
     model = model.to(device)
 
     # == customize loss function
-    weights = [17, 1]
-    class_weights = th.FloatTensor(weights).to(device)
-    loss_fcn = nn.CrossEntropyLoss(weight=class_weights)
-
+    # custom loss function
+    # class_weights = th.FloatTensor(weights).to(device)
+    loss_fcn = nn.CrossEntropyLoss()
+    # loss_fcn = nn.BCELoss(weight = class_weights)
+    # loss_fcn = weighted_binary_cross_entropy()
     optimizer = optim.Adam(model.parameters(), lr=args.lr)
 
     sampler = dgl.dataloading.MultiLayerNeighborSampler(
@@ -178,15 +200,16 @@ def run(args, device, data, checkpoint_path, best_model_path):
 
     # Training loop
     valid_loss_min = np.Inf
-    loss_vals = []
+    # loss_vals = []
 
     for epoch in range(args.num_epochs):
 
         # Loop over the dataloader to sample the computation dependency graph as a list of
         # blocks.
         # tic_step = time.time()
-        epoch_loss = []
+        # epoch_loss = []
         model.train()
+
         for step, (input_nodes, seeds, blocks) in enumerate(dataloader):
             # Load the input features of all the required input nodes as well as output labels of seeds node in a batch
             batch_inputs, batch_labels = load_subtensor(train_nfeat, train_labels,
@@ -196,8 +219,10 @@ def run(args, device, data, checkpoint_path, best_model_path):
 
             # Compute loss and prediction
             batch_pred = model(blocks, batch_inputs)
+
             loss = loss_fcn(batch_pred, batch_labels)
-            epoch_loss.append(loss.item())
+
+            # epoch_loss.append(loss.item())
 
             optimizer.zero_grad()
             loss.backward()
@@ -206,10 +231,12 @@ def run(args, device, data, checkpoint_path, best_model_path):
             # train_loss = train_loss + ((1 / (step + 1)) * (loss.data - train_loss))
 
         model.eval()
-        loss_vals.append(sum(epoch_loss) / len(epoch_loss))
+        # loss_vals.append(sum(epoch_loss) / len(epoch_loss))
 
-        train_acc, train_loss, _ = evaluate(model, train_nfeat,train_labels,device, dataloader,loss_fcn)
-        val_acc, valid_loss, _ = evaluate(model, val_nfeat, val_labels,device, valdataloader, loss_fcn)
+        train_acc, train_loss, _ = evaluate(model, train_nfeat, train_labels, device, dataloader, loss_fcn)
+        val_acc, valid_loss, _ = evaluate(model, val_nfeat, val_labels, device, valdataloader, loss_fcn)
+        # train_losslist.append(train_loss)
+        # val_losslist.append(valid_loss)
 
         print('Epoch: {} \tTraining acc: {:.6f} \tValidation acc: {:.6f} \tTraining Loss: {:.6f} \tValidation Loss: {:.6f}'.format(
             epoch,
@@ -232,18 +259,20 @@ def run(args, device, data, checkpoint_path, best_model_path):
             save_ckp(checkpoint, True, checkpoint_path, best_model_path)
             valid_loss_min = valid_loss
 
-    plt.plot(np.linspace(1, args.num_epochs, args.num_epochs).astype(int), loss_vals)
+    # plt.plot(np.linspace(1, args.num_epochs, args.num_epochs).astype(int), train_losslist)
+    # plt.figure(2)
+    # plt.plot(np.linspace(1, args.num_epochs, args.num_epochs).astype(int), val_losslist)
 
 if __name__ == '__main__':
     argparser = argparse.ArgumentParser()
     argparser.add_argument('--gpu', type=int, default=0,
                            help="GPU device ID. Use -1 for CPU training")
     argparser.add_argument('--dataset', type=str, default='PLC')
-    argparser.add_argument('--num-epochs', type=int, default = 300)
-    argparser.add_argument('--hidden_dim', type=int, default = 64)
+    argparser.add_argument('--num-epochs', type=int, default = 50)
+    argparser.add_argument('--hidden_dim', type=int, default = 48)
     argparser.add_argument('--num-layers', type=int, default=3)
-    argparser.add_argument('--fan-out', type=str, default='10,15,10')
-    argparser.add_argument('--batch-size', type=int, default=64)
+    argparser.add_argument('--fan-out', type=str, default='8,10,8')
+    argparser.add_argument('--batch-size', type=int, default=100)
     argparser.add_argument('--log-every', type=int, default=20)
     argparser.add_argument('--eval-every', type=int, default=5)
     argparser.add_argument('--lr', type=float, default=0.001)
@@ -270,24 +299,20 @@ if __name__ == '__main__':
 
     # changes
     if args.dataset == 'PLC':
-        g, n_classes = load_plcgraph(filepath=filepath, train_ratio=0.8, valid_ratio=0.1)
-    # elif args.dataset == 'reddit':
-    #     g, n_classes = load_reddit()
-    # elif args.dataset == 'ogbn-products':
-    #     g, n_classes = load_ogb('ogbn-products')
+        g, n_classes = load_plcgraph(n_train=20, n_val=20)
 
     else:
         raise Exception('unknown dataset')
 
     # if args.inductive:
-    train_g, val_g, test_g = inductive_split(g)
+    train_g, val_g = inductive_split(g)
 
     train_nfeat = train_g.ndata.pop('features')
     val_nfeat = val_g.ndata.pop('features')
-    test_nfeat = test_g.ndata.pop('features')
+    # test_nfeat = test_g.ndata.pop('features')
     train_labels = train_g.ndata.pop('labels')
     val_labels = val_g.ndata.pop('labels')
-    test_labels = test_g.ndata.pop('labels')
+    # test_labels = test_g.ndata.pop('labels')
 
     print("no of train, and val nodes", train_nfeat.shape, val_nfeat.shape)
 
@@ -301,8 +326,8 @@ if __name__ == '__main__':
         train_labels = train_labels.to(device)
 
     # Pack data
-    data = n_classes, train_g, val_g, test_g, train_nfeat, train_labels, \
-           val_nfeat, val_labels, test_nfeat, test_labels,g
+    data = n_classes, train_g, val_g, train_nfeat, train_labels, \
+           val_nfeat, val_labels, g
 
-    run(args, device, data, cnf.modelpath + "\\current_checkpoint.pt", cnf.modelpath + "\\plc_10.7k.pt")
+    run(args, device, data, cnf.modelpath + "\\current_checkpoint_pubmed.pt", cnf.modelpath + "\\pubmed_uc.pt")
 
