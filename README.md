@@ -3,7 +3,8 @@ Graph machine learning based scalable framework for identifying critical nodes/l
 
 ## Relevant papers
 
-1. [Scalable Graph Neural Network-based framework for identifying critical nodes and links in Complex Networks](https://arxiv.org/abs/2012.15725)
+1. [Scalable Graph Neural Network-based framework for identifying critical nodes and links in Complex Networks](https://www.sciencedirect.com/science/article/pii/S0925231221015113)
+2. [Bayesian Graph Neural Network for Fast identification of critical nodes in Uncertain Complex Networks](https://arxiv.org/abs/2012.15733)
 
 ## Contributors
 1. Dr. Bala Natarajan (Kansas State University, USA)
