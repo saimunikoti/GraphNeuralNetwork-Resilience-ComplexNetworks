@@ -150,35 +150,32 @@ def evaluate_test_mc(model, test_labels, device, dataloader, loss_fcn, g, n_mcsi
     model.apply(apply_dropout)
 
     onehot_encoder = OneHotEncoder(sparse=False)
-    onehot_encoder.fit_transform(np.array([[0],[1],[2]]))
 
-    Resultsdf = pd.DataFrame()
+    classlabellist = []
+    for count in range(n_classes):
+        classlabellist.append([count])
 
-    sigmatot1_list = []
-    sigmatot2_list = []
-    sigmatot3_list = []
+    classlabellist = np.array(classlabellist)
+    onehot_encoder.fit_transform(classlabellist)
 
-    Nll1_list = []
-    Nll2_list = []
-    Nll3_list = []
+    filepath = cnf.modelpath + "SemiResultsdic_pubmed_meanpred_var12.pkl"
 
-    truec1_list = []
-    truec2_list = []
-    truec3_list = []
+    with open(filepath, 'rb') as f:
+        mean_dic = pickle.load(f)
 
-    loss_list = []
+    diffmeanarray = np.mean(mean_dic['diffmean_array'], axis=2)
+    predmeanarray = np.mean(mean_dic['pred_array'], axis=2)
 
-    filepath = cnf.modelpath + "Resultsdf_meanpred_var5-4.xlsx"
-    meandf = pd.read_excel(filepath)
-    diffmeanc1 = meandf['diffMean_c1']
-    diffmeanc2 = meandf['diffMean_c2']
-    diffmeanc3 = meandf['diffMean_c3']
+    n_testsamples = dataloader.__len__()
+
+    sigmatot_array = np.zeros(shape=(n_testsamples, n_classes))
+    nll_array = np.zeros(shape=(n_testsamples, n_classes))
+    true_array = np.zeros(shape=(n_testsamples, n_classes))
+    loss_array = np.zeros(shape=(n_testsamples, n_mcsim))
 
     for step, (input_nodes, seeds, blocks) in enumerate(dataloader):
-        predc1 = []
-        predc2 = []
-        predc3 = []
-        tloss = []
+
+        var_pred = np.zeros(shape=(n_mcsim, n_classes))
 
         for countmc in range(n_mcsim):
 
@@ -192,60 +189,55 @@ def evaluate_test_mc(model, test_labels, device, dataloader, loss_fcn, g, n_mcsi
                 # Compute loss and prediction
                 batch_pred = model(blocks, batch_inputs, g)
 
-                predc1.append(batch_pred.cpu().detach().numpy()[0][0])
-                predc2.append(batch_pred.cpu().detach().numpy()[0][1])
-                predc3.append(batch_pred.cpu().detach().numpy()[0][2])
+                var_pred[countmc, :] = batch_pred.cpu().detach().numpy()[0]
 
                 loss = loss_fcn(batch_pred, batch_labels)
-                tloss.append(loss.item())
+                # tloss.append(loss.item())
+                loss_array[step, countmc] = loss.item()
                 # test_loss = test_loss + ((1 / (step + 1)) * (loss.data - test_loss))
 
             print("node-mcit", step, countmc)
 
-        # model.train() # rechange the model mode to training
-        sigmatot1_list.append(np.mean(predc1) + diffmeanc1[step])
-        sigmatot2_list.append(np.mean(predc2) + diffmeanc2[step])
-        sigmatot3_list.append(np.mean(predc3) + diffmeanc3[step])
+        var_pred = np.mean(var_pred, axis=0)
+
+        for countc in range(n_classes):
+            sigmatot_array[step, countc] = var_pred[countc] + diffmeanarray[step, countc]
+
+        # nll for each sample, class and mc_sim
+        for countc in range(n_classes):
+            nll_array[step, countc] = (0.5 * np.log(sigmatot_array[step, countc])) + \
+                                    (1 / (2 * sigmatot_array[step, countc]) * \
+                                    np.square(mean_dic['true_array'][step, countc] - predmeanarray[step, countc] ))
 
         temp_label = np.reshape(batch_labels.cpu().detach().numpy(), (1, 1))
-        truec1_list.append(onehot_encoder.transform(temp_label)[0][0])
-        truec2_list.append(onehot_encoder.transform(temp_label)[0][1])
-        truec3_list.append(onehot_encoder.transform(temp_label)[0][2])
 
-        loss_list.append(np.mean(tloss))
+        for countc in range(n_classes):
+            true_array[step, countc] = onehot_encoder.transform(temp_label)[0][countc]
 
-        nll_calc_c1 = (0.5 * np.log(np.abs(sigmatot1_list[-1])))+(1 / (2 * sigmatot1_list[-1]) *
-                                                    np.square(meandf['ytrue_c1'][step] - meandf['ypred_c1'][step]))
-        Nll1_list.append(nll_calc_c1)
-        nll_calc_c2 = (0.5 * np.log(np.abs(sigmatot2_list[-1]))) + (1 / (2 * sigmatot2_list[-1]) *
-                                                    np.square(meandf['ytrue_c2'][step] - meandf['ypred_c2'][step]))
-        Nll2_list.append(nll_calc_c2)
-        nll_calc_c3 = (0.5 * np.log(np.abs(sigmatot3_list[-1]))) + (1 / (2 * sigmatot3_list[-1]) *
-                                                    np.square(meandf['ytrue_c3'][step] - meandf['ypred_c3'][step]))
-        Nll3_list.append(nll_calc_c3)
+    filepath = cnf.modelpath + "SemiResultsdic_pubmed_varpred_var12.pkl"
 
-    Resultsdf['ypred_c1'] = meandf['ypred_c1']
-    Resultsdf['ypred_c2'] = meandf['ypred_c2']
-    Resultsdf['ypred_c3'] = meandf['ypred_c3']
+    mean_dic['sigmatot_array'] = sigmatot_array
+    mean_dic['nll_array'] = nll_array
+    mean_dic['varloss_array'] = loss_array
 
-    Resultsdf['ytrue_c1'] = truec1_list
-    Resultsdf['ytrue_c2'] = truec2_list
-    Resultsdf['ytrue_c3'] = truec3_list
+    with open(filepath, 'wb') as f:
+        pickle.dump(mean_dic, f)
 
-    Resultsdf['nll_c1'] = Nll1_list
-    Resultsdf['nll_c2'] = Nll2_list
-    Resultsdf['nll_c3'] = Nll3_list
+    # average results across monte carlo simulations and save in csv
+    Resultsdf = pd.DataFrame()
 
-    Resultsdf['predloss'] = meandf['predloss']
+    for count in range(n_classes):
+        predname = 'pred_array_c' + str(count+1)
+        truename = 'true_array_c' + str(count+1)
+        propvarname = 'prop_var_c' + str(count+1)
 
-    Resultsdf['varloss'] = loss_list
+        Resultsdf[predname] = np.mean(mean_dic['pred_array'][:,count,:], axis=1)
+        Resultsdf[truename] = mean_dic['true_array'][:,count]
+        Resultsdf[propvarname] = mean_dic['sigmatot_array'][:,count]
 
-    Resultsdf['sigmatot_c1'] = sigmatot1_list
-    Resultsdf['sigmatot_c2'] = sigmatot2_list
-    Resultsdf['sigmatot_c3'] = sigmatot3_list
+    filepath = cnf.modelpath + "SemiResultsdic_pubmed_var12.csv"
 
-    filepath = cnf.modelpath + "Resultsdf_varpred_var5-4.xlsx"
-    Resultsdf.to_excel(filepath, index=False)
+    Resultsdf.to_csv(filepath)
 
 def load_subtensor(nfeat, labels, seeds, input_nodes, device):
     """
@@ -267,30 +259,6 @@ def load_ckp(checkpoint_fpath, model, optimizer):
     model.load_state_dict(checkpoint['state_dict'])
     valid_loss_min = checkpoint['valid_loss_min']
     return model, valid_loss_min.item()
-
-def get_acc_nll(filepath):
-
-    Results_df = pd.read_excel(filepath)
-
-    temp_col_pred = Results_df.apply(
-        lambda row: np.argmax(np.array([row['ypred_c1'], row['ypred_c2'], row['ypred_c3']] ) ),
-        axis=1
-    )
-    temp_col_true = Results_df.apply(
-        lambda row: np.argmax(np.array([row['ytrue_c1'], row['ytrue_c2'], row['ytrue_c3']] ) ),
-        axis=1
-    )
-    Results_df['class_pred'] = temp_col_pred
-    Results_df['class_true'] = temp_col_true
-    Avg_NLL = 0.0
-    Accuracy = accuracy_score(Results_df['class_true'], Results_df['class_pred'])
-    # Avg_NLL = np.mean([np.mean(Results_df['nll_c1']), np.mean(Results_df['nll_c2']), np.mean(Results_df['nll_c3'])] )
-    Avg_PredLoss = np.mean(Results_df['predloss'])
-
-    return Results_df, Accuracy, Avg_NLL, Avg_PredLoss
-
-filepath = cnf.modelpath + "Resultsdf_meanpred_var2-5.xlsx"
-Results_df, Accuracy, Avg_NLL, Avg_PredLoss = get_acc_nll(filepath)
 
 #### Entry point
 
@@ -349,7 +317,7 @@ def run(args, device, data, best_model_path):
     print("valid_loss_min = ", valid_loss_min)
 
     # dropout and batch normalization to evaluation mode
-    sampler = dgl.dataloading.MultiLayerFullNeighborSampler(3)
+    sampler = dgl.dataloading.MultiLayerFullNeighborSampler(2)
 
     # Create PyTorch DataLoader for constructing blocks
     dataloader = get_dataloader(test_g, test_nid, sampler)
@@ -386,8 +354,8 @@ if __name__ == '__main__':
     argparser.add_argument('--dataset', type=str, default='PLC')
     argparser.add_argument('--num-epochs', type=int, default= 100)
     argparser.add_argument('--num_hidden', type=int, default=48)
-    argparser.add_argument('--num-layers', type=int, default=3)
-    argparser.add_argument('--fan-out', type=str, default='8,10,8')
+    argparser.add_argument('--num-layers', type=int, default=2)
+    argparser.add_argument('--fan-out', type=str, default='8,10')
     argparser.add_argument('--batch-size', type=int, default=1)
     argparser.add_argument('--log-every', type=int, default=20)
     argparser.add_argument('--eval-every', type=int, default=5)
@@ -418,6 +386,11 @@ if __name__ == '__main__':
     else:
         raise Exception('unknown dataset')
 
+    edgelistnew = g.edges()
+    # square the edge prob for variance computation
+    for count in range(len(edgelistnew[0])):
+        g.edata['weight'][th.tensor([count])] = th.square(g.edata['weight'][th.tensor([count])])
+
     # if args.inductive:
     test_g = inductive_split(g)
 
@@ -444,3 +417,4 @@ if __name__ == '__main__':
     end_time = time.time()-start_time
 
     print("total time", end_time)
+

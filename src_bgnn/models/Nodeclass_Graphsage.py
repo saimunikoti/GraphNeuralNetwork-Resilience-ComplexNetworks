@@ -252,7 +252,6 @@ def run(args, device, data, checkpoint_path, best_model_path):
         }
 
         save_ckp(checkpoint, False, checkpoint_path, best_model_path)
-
         # TODO: save the model if validation loss has decreased
         if valid_loss <= valid_loss_min:
             print('Validation loss decreased ({:.6f} --> {:.6f}).  Saving model ...'.format(valid_loss_min,valid_loss))
@@ -270,9 +269,9 @@ if __name__ == '__main__':
     argparser.add_argument('--dataset', type=str, default='PLC')
     argparser.add_argument('--num-epochs', type=int, default = 50)
     argparser.add_argument('--hidden_dim', type=int, default = 48)
-    argparser.add_argument('--num-layers', type=int, default=3)
-    argparser.add_argument('--fan-out', type=str, default='8,10,8')
-    argparser.add_argument('--batch-size', type=int, default=100)
+    argparser.add_argument('--num-layers', type=int, default=2)
+    argparser.add_argument('--fan-out', type=str, default='8,10')
+    argparser.add_argument('--batch-size', type=int, default= 50)
     argparser.add_argument('--log-every', type=int, default=20)
     argparser.add_argument('--eval-every', type=int, default=5)
     argparser.add_argument('--lr', type=float, default=0.001)
@@ -316,10 +315,7 @@ if __name__ == '__main__':
 
     print("no of train, and val nodes", train_nfeat.shape, val_nfeat.shape)
 
-    # else:
-    #     train_g = val_g = test_g = g
-    #     train_nfeat = val_nfeat = test_nfeat = g.ndata.pop('features')
-    #     train_labels = val_labels = test_labels = g.ndata.pop('labels')
+    print("input graph size :", train_nfeat.shape)
 
     if not args.data_cpu:
         train_nfeat = train_nfeat.to(device)
@@ -329,5 +325,4 @@ if __name__ == '__main__':
     data = n_classes, train_g, val_g, train_nfeat, train_labels, \
            val_nfeat, val_labels, g
 
-    run(args, device, data, cnf.modelpath + "\\current_checkpoint_pubmed.pt", cnf.modelpath + "\\pubmed_uc.pt")
-
+    run(args, device, data, cnf.modelpath + "\\current_checkpoint_amazon-comp.pt", cnf.modelpath + "\\amazon-comp_uc.pt")

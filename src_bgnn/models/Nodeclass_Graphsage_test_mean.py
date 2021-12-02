@@ -78,6 +78,170 @@ def evaluate_test(model, test_labels, device, dataloader, loss_fcn, g):
 
     return test_acc, test_loss, class1acc
 
+# def evaluate_test_mc_backup(model, test_labels, device, dataloader, loss_fcn, g, n_mcsim):
+#
+#     """
+#     Evaluate the model on the given data set specified by ``val_nid``.
+#     g : The entire graph.
+#     inputs : The features of all the nodes.
+#     labels : The labels of all the nodes.
+#     val_nid : the node Ids for validation.
+#     device : The GPU device to evaluate on.
+#     """
+#
+#     def apply_dropout(m):
+#         if type(m) == nn.Dropout:
+#             m.train()
+#
+#     model.eval() # change the mode
+#     model.apply(apply_dropout)
+#
+#     m_softmax = nn.Softmax(dim=1)
+#
+#     onehot_encoder = OneHotEncoder(sparse=False)
+#     onehot_encoder.fit_transform(np.array([[0],[1],[2],[3],[4],[5],[6]]))
+#
+#     Resultsdf = pd.DataFrame()
+#
+#     predc1_list = []
+#     predc2_list = []
+#     predc3_list = []
+#     predc4_list = []
+#     predc5_list = []
+#     predc6_list = []
+#     predc7_list = []
+#
+#     diffMean_list_c1 = []
+#     diffMean_list_c2 = []
+#     diffMean_list_c3 = []
+#     diffMean_list_c4 = []
+#     diffMean_list_c5 = []
+#     diffMean_list_c6 = []
+#     diffMean_list_c7 = []
+#
+#     truec1_list = []
+#     truec2_list = []
+#     truec3_list = []
+#     truec4_list = []
+#     truec5_list = []
+#     truec6_list = []
+#     truec7_list = []
+#
+#     loss_list = []
+#
+#     for step, (input_nodes, seeds, blocks) in enumerate(dataloader):
+#         predc1 = []
+#         predc2 = []
+#         predc3 = []
+#         predc4 = []
+#         predc5 = []
+#         predc6 = []
+#         predc7 = []
+#
+#         tloss  = []
+#
+#         for countmc in range(n_mcsim):
+#
+#             with th.no_grad():
+#                 # Load the input features of all the required input nodes as well as output labels of seeds node in a batch
+#                 batch_inputs, batch_labels = load_subtensor(test_nfeat, test_labels,
+#                                                             seeds, input_nodes, device)
+#
+#                 blocks = [block.int().to(device) for block in blocks]
+#
+#                 # Compute loss and prediction
+#                 batch_pred = model(blocks, batch_inputs, g)
+#
+#                 pred_prob = m_softmax(batch_pred)
+#
+#                 predc1.append(pred_prob.cpu().detach().numpy()[0][0])
+#                 predc2.append(pred_prob.cpu().detach().numpy()[0][1])
+#                 predc3.append(pred_prob.cpu().detach().numpy()[0][2])
+#                 predc4.append(pred_prob.cpu().detach().numpy()[0][3])
+#                 predc5.append(pred_prob.cpu().detach().numpy()[0][4])
+#                 predc6.append(pred_prob.cpu().detach().numpy()[0][5])
+#                 predc7.append(pred_prob.cpu().detach().numpy()[0][6])
+#
+#                 # temp_pred = th.argmax(batch_pred, dim=1)
+#
+#                 # current_acc = accuracy_score(batch_labels.cpu().detach().numpy(), temp_pred.cpu().detach().numpy())
+#                 # test_acc = test_acc + ((1 / (step + 1)) * (current_acc - test_acc))
+#
+#                 # mcensemble_acc.append(test_acc)
+#
+#                 # cnfmatrix = confusion_matrix(batch_labels.cpu().detach().numpy(), temp_pred.cpu().detach().numpy())
+#                 # class1acc = class1acc + ((1 / (step + 1)) * (cnfmatrix[0][0] / np.sum(cnfmatrix[0, :]) - class1acc))
+#
+#                 # print(cnfmatrix)
+#
+#                 # correct = temp_pred.eq(batch_labels)
+#                 # test_acc = test_acc + correct
+#
+#                 loss = loss_fcn(batch_pred, batch_labels)
+#                 tloss.append(loss.item())
+#
+#                 # test_loss = test_loss + ((1 / (step + 1)) * (loss.data - test_loss))
+#
+#             print("node-mciter", step, countmc)
+#
+#         # model.train() # rechange the model mode to training
+#         predc1_list.append(np.mean(predc1))
+#         predc2_list.append(np.mean(predc2))
+#         predc3_list.append(np.mean(predc3))
+#         predc4_list.append(np.mean(predc4))
+#         predc5_list.append(np.mean(predc5))
+#         predc6_list.append(np.mean(predc6))
+#         predc7_list.append(np.mean(predc7))
+#
+#         temp_label = np.reshape(batch_labels.cpu().detach().numpy(), (1, 1))
+#
+#         truec1_list.append(onehot_encoder.transform(temp_label)[0][0])
+#         truec2_list.append(onehot_encoder.transform(temp_label)[0][1])
+#         truec3_list.append(onehot_encoder.transform(temp_label)[0][2])
+#         truec4_list.append(onehot_encoder.transform(temp_label)[0][3])
+#         truec5_list.append(onehot_encoder.transform(temp_label)[0][4])
+#         truec6_list.append(onehot_encoder.transform(temp_label)[0][5])
+#         truec7_list.append(onehot_encoder.transform(temp_label)[0][6])
+#
+#         diffMean_list_c1.append(np.mean(np.square(np.array(predc1)-np.mean(predc1))))
+#         diffMean_list_c2.append(np.mean(np.square(np.array(predc2)-np.mean(predc2))))
+#         diffMean_list_c3.append(np.mean(np.square(np.array(predc3)-np.mean(predc3))))
+#         diffMean_list_c4.append(np.mean(np.square(np.array(predc4)-np.mean(predc4))))
+#         diffMean_list_c5.append(np.mean(np.square(np.array(predc5)-np.mean(predc5))))
+#         diffMean_list_c6.append(np.mean(np.square(np.array(predc6)-np.mean(predc6))))
+#         diffMean_list_c7.append(np.mean(np.square(np.array(predc7)-np.mean(predc7))))
+#
+#         loss_list.append(np.mean(tloss))
+#
+#     Resultsdf['ypred_c1'] = predc1_list
+#     Resultsdf['ypred_c2'] = predc2_list
+#     Resultsdf['ypred_c3'] = predc3_list
+#     Resultsdf['ypred_c4'] = predc4_list
+#     Resultsdf['ypred_c5'] = predc5_list
+#     Resultsdf['ypred_c6'] = predc6_list
+#     Resultsdf['ypred_c7'] = predc7_list
+#
+#     Resultsdf['ytrue_c1'] = truec1_list
+#     Resultsdf['ytrue_c2'] = truec2_list
+#     Resultsdf['ytrue_c3'] = truec3_list
+#     Resultsdf['ytrue_c4'] = truec4_list
+#     Resultsdf['ytrue_c5'] = truec5_list
+#     Resultsdf['ytrue_c6'] = truec6_list
+#     Resultsdf['ytrue_c7'] = truec7_list
+#
+#     Resultsdf['predloss'] = loss_list
+#
+#     Resultsdf['diffMean_c1'] = diffMean_list_c1
+#     Resultsdf['diffMean_c2'] = diffMean_list_c2
+#     Resultsdf['diffMean_c3'] = diffMean_list_c3
+#     Resultsdf['diffMean_c4'] = diffMean_list_c4
+#     Resultsdf['diffMean_c5'] = diffMean_list_c5
+#     Resultsdf['diffMean_c6'] = diffMean_list_c6
+#     Resultsdf['diffMean_c7'] = diffMean_list_c7
+#
+#     filepath = cnf.modelpath + "Results_cora_meanpred_var25.xlsx"
+#     Resultsdf.to_excel(filepath, index=False)
+
 def evaluate_test_mc(model, test_labels, device, dataloader, loss_fcn, g, n_mcsim):
 
     """
@@ -99,28 +263,24 @@ def evaluate_test_mc(model, test_labels, device, dataloader, loss_fcn, g, n_mcsi
     m_softmax = nn.Softmax(dim=1)
 
     onehot_encoder = OneHotEncoder(sparse=False)
-    onehot_encoder.fit_transform(np.array([[0],[1],[2]]))
 
-    Resultsdf = pd.DataFrame()
+    classlabellist = []
+    for count in range(n_classes):
+        classlabellist.append([count])
 
-    predc1_list = []
-    predc2_list = []
-    predc3_list = []
-    diffMean_list_c1 = []
-    diffMean_list_c2 = []
-    diffMean_list_c3 = []
+    classlabellist = np.array(classlabellist)
+    onehot_encoder.fit_transform(classlabellist)
 
-    truec1_list = []
-    truec2_list = []
-    truec3_list = []
+    # onehot_encoder.fit_transform(np.array([[0],[1],[2],[3],[4],[5],[6]]))
 
-    loss_list = []
+    n_testsamples = dataloader.__len__()
+
+    pred_array = np.zeros(shape=(n_testsamples, n_classes, n_mcsim))
+    true_array = np.zeros(shape=(n_testsamples, n_classes))
+    diffmean_array = np.zeros(shape=(n_testsamples, n_classes, n_mcsim))
+    loss_array = np.zeros(shape=(n_testsamples, n_mcsim))
 
     for step, (input_nodes, seeds, blocks) in enumerate(dataloader):
-        predc1 = []
-        predc2 = []
-        predc3 = []
-        tloss  = []
 
         for countmc in range(n_mcsim):
 
@@ -136,63 +296,33 @@ def evaluate_test_mc(model, test_labels, device, dataloader, loss_fcn, g, n_mcsi
 
                 pred_prob = m_softmax(batch_pred)
 
-                predc1.append(pred_prob.cpu().detach().numpy()[0][0])
-                predc2.append(pred_prob.cpu().detach().numpy()[0][1])
-                predc3.append(pred_prob.cpu().detach().numpy()[0][2])
-
-                # temp_pred = th.argmax(batch_pred, dim=1)
-
-                # current_acc = accuracy_score(batch_labels.cpu().detach().numpy(), temp_pred.cpu().detach().numpy())
-                # test_acc = test_acc + ((1 / (step + 1)) * (current_acc - test_acc))
-
-                # mcensemble_acc.append(test_acc)
-
-                # cnfmatrix = confusion_matrix(batch_labels.cpu().detach().numpy(), temp_pred.cpu().detach().numpy())
-                # class1acc = class1acc + ((1 / (step + 1)) * (cnfmatrix[0][0] / np.sum(cnfmatrix[0, :]) - class1acc))
-
-                # print(cnfmatrix)
-
-                # correct = temp_pred.eq(batch_labels)
-                # test_acc = test_acc + correct
+                for countc in range(n_classes):
+                    pred_array[step, countc, countmc] = pred_prob.cpu().detach().numpy()[0][countc]
 
                 loss = loss_fcn(batch_pred, batch_labels)
-                tloss.append(loss.item())
 
-                # test_loss = test_loss + ((1 / (step + 1)) * (loss.data - test_loss))
+                loss_array[step, countmc] = loss.item()
 
             print("node-mciter", step, countmc)
 
-        # model.train() # rechange the model mode to training
-        predc1_list.append(np.mean(predc1))
-        predc2_list.append(np.mean(predc2))
-        predc3_list.append(np.mean(predc3))
-
         temp_label = np.reshape(batch_labels.cpu().detach().numpy(), (1, 1))
-        truec1_list.append(onehot_encoder.transform(temp_label)[0][0])
-        truec2_list.append(onehot_encoder.transform(temp_label)[0][1])
-        truec3_list.append(onehot_encoder.transform(temp_label)[0][2])
 
-        diffMean_list_c1.append(np.mean(np.square(np.array(predc1)-np.mean(predc1))))
-        diffMean_list_c2.append(np.mean(np.square(np.array(predc2)-np.mean(predc2))))
-        diffMean_list_c3.append(np.mean(np.square(np.array(predc3)-np.mean(predc3))))
+        for countc in range(n_classes):
+            true_array[step, countc] = onehot_encoder.transform(temp_label)[0][countc]
 
-        loss_list.append(np.mean(tloss))
+        for countc in range(n_classes):
+            diffmean_array[step, countc,:] = np.square(pred_array[step,countc,:]-np.mean(pred_array[step, countc,:]))
 
-    Resultsdf['ypred_c1'] = predc1_list
-    Resultsdf['ypred_c2'] = predc2_list
-    Resultsdf['ypred_c3'] = predc3_list
-    Resultsdf['ytrue_c1'] = truec1_list
-    Resultsdf['ytrue_c2'] = truec2_list
-    Resultsdf['ytrue_c3'] = truec3_list
+    Resultsdic = {}
+    Resultsdic['pred_array'] = pred_array
+    Resultsdic['true_array'] = true_array
+    Resultsdic['diffmean_array'] = diffmean_array
+    Resultsdic['loss_array'] = loss_array
 
-    Resultsdf['predloss'] = loss_list
+    filepath = cnf.modelpath + "SemiResultsdic_pubmed_meanpred_var12.pkl"
 
-    Resultsdf['diffMean_c1'] = diffMean_list_c1
-    Resultsdf['diffMean_c2'] = diffMean_list_c2
-    Resultsdf['diffMean_c3'] = diffMean_list_c3
-
-    filepath = cnf.modelpath + "Resultsdf_meanpred_var5-4.xlsx"
-    Resultsdf.to_excel(filepath, index=False)
+    with open(filepath, 'wb') as f:
+        pickle.dump(Resultsdic, f)
 
 def load_subtensor(nfeat, labels, seeds, input_nodes, device):
     """
@@ -205,6 +335,7 @@ def load_subtensor(nfeat, labels, seeds, input_nodes, device):
 def save_ckp(state, is_best, checkpoint_path, best_model_path):
     f_path = checkpoint_path
     th.save(state, f_path)
+
     if is_best:
         best_fpath = best_model_path
         shutil.copyfile(f_path, best_fpath)
@@ -274,7 +405,7 @@ def run(args, device, data, best_model_path):
     print("valid_loss_min = ", valid_loss_min)
 
     # dropout and batch normalization to evaluation mode
-    sampler = dgl.dataloading.MultiLayerFullNeighborSampler(3)
+    sampler = dgl.dataloading.MultiLayerFullNeighborSampler(2)
 
     # Create PyTorch DataLoader for constructing blocks
     dataloader = get_dataloader(test_g, test_nid, sampler)
@@ -291,7 +422,6 @@ def run(args, device, data, best_model_path):
 
     # print('Avg epoch time: {}'.format(avg / (epoch - 4)))
 
-
 if __name__ == '__main__':
     th.manual_seed(42)
     argparser = argparse.ArgumentParser()
@@ -300,8 +430,8 @@ if __name__ == '__main__':
     argparser.add_argument('--dataset', type=str, default='PLC')
     argparser.add_argument('--num-epochs', type=int, default= 100)
     argparser.add_argument('--num_hidden', type=int, default=48)
-    argparser.add_argument('--num-layers', type=int, default=3)
-    argparser.add_argument('--fan-out', type=str, default='8,10,8')
+    argparser.add_argument('--num-layers', type=int, default=2)
+    argparser.add_argument('--fan-out', type=str, default='8,10')
     argparser.add_argument('--batch-size', type=int, default=1)
     argparser.add_argument('--log-every', type=int, default=20)
     argparser.add_argument('--eval-every', type=int, default=5)

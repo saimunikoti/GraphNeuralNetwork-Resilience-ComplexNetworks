@@ -914,6 +914,94 @@ def plotsubgraph(g, nodelist, gcolor) :
     plt.figure()
     nx.draw_networkx(H, node_color= color_map)
 
+# get weighted adjacency matrix fron nx graph
+def getweightedadj_nxgraph(g):
+    graph = g.copy()
+    noofnodes = len(graph.nodes())
+    wadj = np.zeros(shape=(noofnodes, noofnodes))
+    edgelist = list(graph.edges())
+
+    for iter in edgelist:
+        try:
+            wadj[iter[0],iter[1]] = graph.edges[iter[0], iter[1]]['weight']
+            wadj[iter[1], iter[0]] = wadj[iter[0],iter[1]]
+        except:
+            print("nw")
+
+    return wadj
+
+def get_featuremean(g):
+    meanfeat = []
+    for node,d in g.nodes(data=True):
+        meanfeat.append(g.nodes[node]['feature'])
+
+    return np.array(meanfeat)
+
+def get_acc_nll(filepath):
+
+    Results_df = pd.read_excel(filepath)
+
+    # temp_col_pred = Results_df.apply(
+    #     lambda row: np.argmax(np.array([row['ypred_c1'], row['ypred_c2'], row['ypred_c3'], row['ypred_c4'],row['ypred_c5'],row['ypred_c6'],row['ypred_c7']] ) ),
+    #     axis=1
+    # )
+    temp_col_pred = Results_df.apply(
+        lambda row: np.argmax(np.array([row['ypred_c1'], row['ypred_c2'], row['ypred_c3'] ] ) ),
+        axis=1
+    )
+    # temp_col_true = Results_df.apply(
+    #     lambda row: np.argmax(np.array([row['ytrue_c1'], row['ytrue_c2'], row['ytrue_c3'], row['ytrue_c4'], row['ytrue_c5'], row['ytrue_c6'],row['ytrue_c7']])),
+    #     axis=1
+    # )
+    temp_col_true = Results_df.apply(
+        lambda row: np.argmax(np.array([row['ytrue_c1'], row['ytrue_c2'], row['ytrue_c3']])),
+        axis=1
+    )
+    # nll_calc_c1 = Results_df.apply(
+    #     lambda row: 0.5 * np.log(row['sigmatot_c1']) + (1 / (2 * row['sigmatot_c1'])) * np.square(row['ytrue_c1'] - row['ypred_c1']),
+    #     axis=1
+    # )
+
+    # Results_df['nll_calc_c1_v2'] = nll_calc_c1
+    Results_df['class_pred'] = temp_col_pred
+    Results_df['class_true'] = temp_col_true
+    Accuracy = accuracy_score(Results_df['class_true'], Results_df['class_pred'])
+
+    # Avg_NLL = np.mean([np.mean(Results_df['nll_c1']), np.mean(Results_df['nll_c2']), np.mean(Results_df['nll_c3']),
+    #                    np.mean(Results_df['nll_c4']), np.mean(Results_df['nll_c5']), np.mean(Results_df['nll_c6']),
+    #                    np.mean(Results_df['nll_c7'])])
+
+    Avg_NLL = np.mean([np.mean(Results_df['nll_c1']), np.mean(Results_df['nll_c2']), np.mean(Results_df['nll_c3'])])
+
+
+    Avg_PredLoss = np.mean(Results_df['predloss'])
+
+    return Results_df, Accuracy, Avg_NLL, Avg_PredLoss
+
+# get networkx graph from dgl inbuilt graphs
+def get_nxgraph_fromdgl(data):
+    gorg = data[0]
+    num_class = data.num_classes
+    feat = gorg.ndata['feat']  # get node feature
+    label = gorg.ndata['label']  # get node labels
+
+    gnx = gorg.to_networkx(node_attrs=['feat','label'] )
+    gnx = nx.Graph(gnx)
+
+    # load amazon features into n graph
+    edgelist = list(gnx.edges)
+    g = nx.Graph()
+    g.add_edges_from(edgelist)
+
+    for cnodes in g.nodes:
+        g.nodes[cnodes]['feature'] = list(gnx.nodes[cnodes]['feat'].numpy())
+
+    nodesubjects = {}
+
+    for nodeiter in g.nodes:
+        nodesubjects[nodeiter] = gnx.nodes[nodeiter]['label'].item()
+
+    return g, nodesubjects
 ## paralllelization for loop
 #
 # num = 10

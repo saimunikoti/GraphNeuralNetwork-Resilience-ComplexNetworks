@@ -10,7 +10,8 @@ import pandas as pd
 import numpy as np
 from scipy.stats import rankdata
 import random
-
+from src_bgnn.data import config as cnf
+import scipy.io as io
 ## generate training data
 
 # graphsizelist = [100, 200, 400, 400, 500, 500, 800, 800, 1000, 1000, 2000, 2000, 3000, 4000]
@@ -180,14 +181,61 @@ plt.close(1)
 ### feature vector
 
 for node_id, node_data in g.nodes(data=True):
-    node_data["feature"] = [g.degree(node_id), nx.average_neighbor_degree(g, nodes=[node_id])[node_id], 1, 1,1]
+    node_data["feature"] = [g.degree(node_id), nx.average_neighbor_degree(g, nodes=[node_id])[node_id], 1, 1, 1]
     # node_data["feature"] = [0.2, 0.033, 0.04, 0,0]
 
 ## generate probability of edges
 
 for cn1,cn2 in g.edges:
-    g[cn1][cn2]['weight'] = np.round(random.uniform(0.5, 1),3)
+    g[cn1][cn2]['weight'] = np.round(random.uniform(0.5, 1), 3)
 
-##
+## get weighted adjacency matrix of graph for map estimate
+
+filepath = cnf.datapath + "\\cora_weighted.gpickle"
+g = nx.read_gpickle(filepath)
+
+for u,v in g.edges():
+    g.edges[u,v]['weight'] = g.edges[u,v]['weight']
+
+W = nx.linalg.graphmatrix.adjacency_matrix(g, dtype=np.float)
+W = W.toarray()
+
+mapping = dict(zip(g, range(0, len(g.nodes()))))
+g_new = nx.relabel_nodes(g, mapping)
+
+def getweightedadj_nxgraph(g):
+    graph = g.copy()
+    noofnodes = len(graph.nodes())
+    wadj = np.zeros(shape=(noofnodes, noofnodes))
+    edgelist = list(graph.edges())
+
+    for iter in edgelist:
+        try:
+            wadj[iter[0],iter[1]] = graph.edges[iter[0], iter[1]]['weight']
+            wadj[iter[1], iter[0]] = wadj[iter[0],iter[1]]
+        except:
+            print("nw")
+
+    return wadj
+
+w_adj_cora = getweightedadj_nxgraph(g_new)
+
+tempdic = {}
+tempdic['wadjacency'] = w_adj_cora
+filename = cnf.datapath + "\\cora_weighted_adjacency.mat"
+io.savemat(filename, tempdic)
+
+filepath = cnf.datapath + "\\cora_weighted.pickle"
+
+with open(filepath, 'rb') as f:
+    g2 = pickle.load(f)
+
+u,v = g2.all_edges(order='eid')
+
+wadj=np.zeros((2708, 2708))
+
+for count,cu,cv in enumerate(zip(u,v)):
+    wadj[u,v] = g2.edata['weight'][th.tensor([count])].numpy()
+    break
 
 

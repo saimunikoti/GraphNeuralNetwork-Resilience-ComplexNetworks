@@ -15,7 +15,8 @@ config = tf.compat.v1.ConfigProto(gpu_options =
 config.gpu_options.allow_growth = True
 session = tf.compat.v1.Session(config=config)
 tf.compat.v1.keras.backend.set_session(session)
-import stellargraph as sg
+
+from stellargraph import StellarGraph
 from stellargraph.data import EdgeSplitter
 from stellargraph.mapper import GraphSAGELinkGenerator
 from stellargraph.layer import GraphSAGE, link_classification
@@ -32,75 +33,148 @@ from tensorflow.keras.callbacks import ModelCheckpoint
 from stellargraph import globalvar
 from stellargraph import datasets
 from IPython.display import display, HTML
+from tensorflow.keras.models import load_model
 from stellargraph.layer import GraphSAGE, MeanPoolingAggregator, MaxPoolingAggregator, MeanAggregator
+from src_bgnn.data import config as cnf
+from stellargraph.layer.link_inference import LinkEmbedding
+import dgl
+
+"""
+This script take raw graph
+Predict link probability using graphsage link prediction model
+Assign predicted link weights in edges and save networkx graph as gpickle file
+Assign predicted link weights in edges, relabel nodes and store dgl graph as pickle file
+
+"""
+
 ##
-batch_size = 50
+batch_size = 20
 epochs = 50  # The number of training epochs for training the GraphSAGE model.
 
 # train, test, validation split
-train_size = 0.2
-test_size = 0.15
-val_size = 0.2
+# train_size = 0.2
+# test_size = 0.15
+# val_size = 0.2
 
-##
+## cora data
+dataset = datasets.Cora()
+display(HTML(dataset.description))
+G, node_subjects = dataset.load(subject_as_feature=True)
+node_subject = node_subjects.astype("category").cat.codes
+print(G.info())
+
+# load citeseer
+dataset = datasets.CiteSeer()
+display(HTML(dataset.description))
+
+G, subjects = dataset.load(largest_connected_component_only=True)
+print(G.info())
+node_subject = subjects.astype("category").cat.codes
+
+# load pubmed
 dataset = datasets.PubMedDiabetes()
 display(HTML(dataset.description))
 G, _subjects = dataset.load()
 print(G.info())
 
+# load amazon co purchase graph dataset
+# data = dgl.data.CiteseerGraphDataset()
+data = dgl.data.AmazonCoBuyComputerDataset()
+
+def get_nxgraph_fromdgl(data):
+    gorg = data[0]
+    num_class = data.num_classes
+    feat = gorg.ndata['feat']  # get node feature
+    label = gorg.ndata['label']  # get node labels
+
+    gnx = gorg.to_networkx(node_attrs=['feat','label'] )
+    gnx = nx.Graph(gnx)
+
+    # load amazon features into n graph
+    edgelist = list(gnx.edges)
+    g = nx.Graph()
+    g.add_edges_from(edgelist)
+
+    for cnodes in g.nodes:
+        g.nodes[cnodes]['feature'] = list(gnx.nodes[cnodes]['feat'].numpy())
+
+    nodesubjects = {}
+
+    for nodeiter in g.nodes:
+        nodesubjects[nodeiter] = gnx.nodes[nodeiter]['label'].item()
+
+    return g, nodesubjects
+
+g, node_subject = get_nxgraph_fromdgl(data)
+
+filepath = cnf.datapath + "\\citeseer_fromdgl.gpickle"
+nx.write_gpickle(g, filepath)
+
+G = StellarGraph.from_networkx(g, node_features="feature")
+
+# load citeseer from dgl
+
 ##
 # Define an edge splitter on the original graph G:
+
 edge_splitter_test = EdgeSplitter(G)
 
 # Randomly sample a fraction p=0.1 of all positive links, and same number of negative links, from G, and obtain the
 # reduced graph G_test with the sampled links removed:
 
 G_test, edge_ids_test, edge_labels_test = edge_splitter_test.train_test_split(
-    p=0.9, method="global", keep_connected=True
-)
+    p=0.1, method="global", keep_connected=True)
 
 # Define an edge splitter on the reduced graph G_test:
-edge_splitter_val = EdgeSplitter(G_test)
-
-# Randomly sample a fraction p=0.1 of all positive links, and same number of negative links, from G_test, and obtain the
-# reduced graph G_train with the sampled links removed:
-
-G_val, edge_ids_val, edge_labels_val = edge_splitter_val.train_test_split(
-    p=val_size, method="global", keep_connected=True
-)
+# edge_splitter_val = EdgeSplitter(G_test)
+#
+# # Randomly sample a fraction p=0.1 of all positive links, and same number of negative links, from G_test, and obtain the
+# # reduced graph G_train with the sampled links removed:
+#
+# G_val, edge_ids_val, edge_labels_val = edge_splitter_val.train_test_split(
+#     p=val_size, method="global", keep_connected=True
+# )
 
 # Define an edge splitter on the reduced graph G_test:
-edge_splitter_train = EdgeSplitter(G_val)
+
+edge_splitter_train = EdgeSplitter(G)
 
 # Randomly sample a fraction p=0.1 of all positive links, and same number of negative links, from G_test, and obtain the
 # reduced graph G_train with the sampled links removed:
 G_train, edge_ids_train, edge_labels_train = edge_splitter_train.train_test_split(
-    p=train_size, method="global", keep_connected=True
+    p=0.1, method="global", keep_connected=True
 )
 
-## get whole graph splitter
+## get whole graph edge ids and labels
 
-edge_splitter_test = EdgeSplitter(G)
+edge_splitter_test_all = EdgeSplitter(G)
 
-# Randomly sample a fraction p=0.1 of all positive links, and same number of negative links, from G, and obtain the
-# reduced graph G_test with the sampled links removed:
-G_all, edge_ids_test_all, edge_labels_test_all = edge_splitter_test.train_test_split(
-    p=0.5, method="global", keep_connected=True
+G_all, edge_ids_train_all, edge_labels_train_all = edge_splitter_test_all.train_test_split(
+    p=0.99999, method="global", keep_connected=False
 )
+
+edge_ids_test_all = edge_splitter_test_all.positive_edges_ids
+edge_labels_test_all = edge_splitter_test_all.positive_edges_labels
 
 ##
-num_samples = [15, 10]
+
+num_samples = [20, 10]
 
 train_gen = GraphSAGELinkGenerator(G_train, batch_size, num_samples)
-val_gen = GraphSAGELinkGenerator(G_val, batch_size, num_samples)
+train_flow = train_gen.flow(edge_ids_train, edge_labels_train, shuffle=True)
+
 test_gen = GraphSAGELinkGenerator(G_test, batch_size, num_samples)
+test_flow = test_gen.flow(edge_ids_test, edge_labels_test)
+
 all_gen = GraphSAGELinkGenerator(G, batch_size, num_samples)
+all_flow = all_gen.flow(edge_ids_test_all, edge_labels_test_all)
 
 layer_sizes = [64, 32]
 
 graphsage = GraphSAGE(
     layer_sizes=layer_sizes, generator=train_gen, bias=True, activations=["relu","linear"], aggregator = MeanAggregator, dropout=0.2
 )
+
 # Build the model and expose input and output sockets of graphsage, for node pair inputs:
 x_inp, x_out = graphsage.in_out_tensors()
 
@@ -117,23 +191,22 @@ model = tf.keras.Model(inputs=x_inp, outputs=prediction)
 model.compile(
     optimizer=tf.keras.optimizers.Adam(lr=1e-3),
     loss=tf.keras.losses.binary_crossentropy,
-    metrics=[tf.keras.metrics.binary_accuracy],
+    metrics=["acc"],
 )
 
-train_flow = train_gen.flow(edge_ids_train, edge_labels_train, shuffle=True)
-val_flow = val_gen.flow(edge_ids_val, edge_labels_val)
-test_flow = test_gen.flow(edge_ids_test, edge_labels_test)
-all_flow = all_gen.flow(edge_ids_test_all, edge_labels_test_all)
-
 ##
-filepath = cnf.modelpath + '\\pubmed.h5'
+
+filepath = cnf.modelpath + '\\amazon_computer_linkpred.h5'
 
 mcp = ModelCheckpoint(filepath, save_best_only=True, monitor='val_loss', mode='min')
 
-history = model.fit(train_flow, epochs = epochs, validation_data=val_flow,  callbacks=[mcp], verbose=2, shuffle=False)
+history = model.fit(train_flow, epochs = 15, validation_data=test_flow,  callbacks=[mcp], verbose=2, shuffle=False)
 
-##
-# prediction
+## prediction
+
+from tensorflow.keras.models import load_model
+
+model = load_model(filepath, custom_objects={"MeanAggregator": MeanAggregator, "LinkEmbedding": LinkEmbedding})
 
 y_pred = model.predict(all_flow)
 
@@ -152,12 +225,23 @@ g3 = nx.Graph(g2)
 for (n1, n2, d) in g3.edges(data=True):
     d.clear()
 
-for (node1, d) in g3.nodes(data=True):
-    d['label'] = _subjects[node1]
+# assign weight 1 to edges
+for u,v in g3.edges():
+    g3.edges[u,v]['weight'] = 1.0
 
+for (node1, d) in g3.nodes(data=True):
+    d['label'] = node_subject[node1]
+
+
+## TODO load graph with partially weights
+
+filepath = cnf.datapath + '\\amazon_computer_weighted' + ".gpickle"
+g3 = nx.read_gpickle(filepath)
+
+# predict edge weights
 i = 0
 
-for single_edge_id, single_edge_label in zip(edge_ids_test_all, edge_labels_test_all):
+for single_edge_id, single_edge_label in zip(edge_ids_test_all[50000:150000,:], edge_labels_test_all[50000:150000]):
     single_edge_id = np.reshape(single_edge_id, (1, 2))
     single_edge_label = np.reshape(single_edge_label, (1,))
     t_flow = all_gen.flow(single_edge_id, single_edge_label)
@@ -169,14 +253,52 @@ for single_edge_id, single_edge_label in zip(edge_ids_test_all, edge_labels_test
         print("=")
         pass
 
-    i+= 1
+    i += 1
     print(i+1)
 
-#
+## some preprocessing of node labels
 
-filepath = cnf.datapath + '\\pubmed_weighted' + ".gpickle"
 
+from sklearn import preprocessing
+le = preprocessing.LabelEncoder()
+le.fit(node_subjects)
+nodelist_index = node_subjects.index
+node_subjects_new = le.transform(node_subjects)
+
+for count, nodeiter in enumerate(nodelist_index):
+    g3.nodes[nodeiter]['label'] = node_subjects_new[count]
+
+## save in gpickle format
+
+filepath = cnf.datapath + '\\amazon_computer_weighted' + ".gpickle"
 nx.write_gpickle(g3, filepath, protocol=4)
+
+## create & save graph in dgl format
+
+import dgl
+filepath = cnf.datapath + "\\citeseer_weighted.gpickle"
+g3 = nx.read_gpickle(filepath)
+nodelist = list(g3.nodes())
+edgelist = list(g3.edges())
+
+mapping = dict(zip(g3, range(0, len(g3.nodes()))))
+# relabel nodes from 0 to ..
+g3_new = nx.relabel_nodes(g3, mapping)
+
+edgelistnew = list(g3_new.edges())
+
+graph3 = dgl.from_networkx(g3_new, node_attrs=['feature','label'])
+
+graph3.edata['weight'] = th.ones(graph3.num_edges(), dtype=th.float32)
+
+for count,(u,v) in enumerate(edgelistnew):
+    graph3.edata['weight'][th.tensor([count])] = th.tensor(g3_new.edges[u,v]['weight'])
+
+import pickle
+filepath = cnf.datapath + "\\citeseer_weighted.pickle"
+
+with open(filepath, 'wb') as f:
+    pickle.dump(graph3, f)
 
 ##
 # ## calibration

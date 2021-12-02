@@ -46,7 +46,7 @@ class SAGE(nn.Module):
                     break
 
             # computing DEGREE OF NODES IN EACH BLOCK OF BATCH
-            batch_degree = th.tensor([ g.out_degrees(enm) for enm in batch_block_nodes ]).to(device='cuda:0')
+            batch_degree = th.tensor([ g.out_degrees(enm) for enm in batch_block_nodes]).to(device='cuda:0')
 
             h = layer(block, h, batch_degree)
             # h = layer(block, h, batch_degree, model_weights[l*3+1], model_weights[3*l+2])
