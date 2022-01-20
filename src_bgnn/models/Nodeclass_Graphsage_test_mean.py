@@ -319,7 +319,7 @@ def evaluate_test_mc(model, test_labels, device, dataloader, loss_fcn, g, n_mcsi
     Resultsdic['diffmean_array'] = diffmean_array
     Resultsdic['loss_array'] = loss_array
 
-    filepath = cnf.modelpath + "SemiResultsdic_pubmed_meanpred_var12.pkl"
+    filepath = cnf.modelpath + "Resultsdic_amazon-comp_meanpred_var12.pkl"
 
     with open(filepath, 'wb') as f:
         pickle.dump(Resultsdic, f)
@@ -484,7 +484,7 @@ if __name__ == '__main__':
     data = n_classes, test_g, test_nfeat, test_labels, g
 
     start_time = time.time()
-    run(args, device, data, cnf.modelpath + "\\pubmed_uc.pt")
+    run(args, device, data, cnf.modelpath + "\\amazon-comp_uc.pt")
     end_time = time.time()-start_time
 
     print("total time", end_time)

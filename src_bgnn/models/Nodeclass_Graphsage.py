@@ -325,4 +325,4 @@ if __name__ == '__main__':
     data = n_classes, train_g, val_g, train_nfeat, train_labels, \
            val_nfeat, val_labels, g
 
-    run(args, device, data, cnf.modelpath + "\\current_checkpoint_amazon-comp.pt", cnf.modelpath + "\\amazon-comp_uc.pt")
+    run(args, device, data, cnf.modelpath + "\\current_checkpoint_ppi.pt", cnf.modelpath + "\\ppi_uc.pt")

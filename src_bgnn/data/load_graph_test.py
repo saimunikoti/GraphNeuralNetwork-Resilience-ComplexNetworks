@@ -8,6 +8,7 @@ from src_bgnn.data import config as cnf
 import random
 import numpy as np
 import pickle
+import copy
 
 class PLCgraphDataset(DGLDataset):
 
@@ -18,9 +19,9 @@ class PLCgraphDataset(DGLDataset):
         # print("train size", self.train_size)
 
     def process(self):
-        self.train_size = 100
-        self.val_size = 10
-        self.test_size = 50
+        self.train_size = 300
+        self.val_size = 30
+        self.test_size = 100
 
         #===== load saved dgl graph from pickle format ===========
         # filepath = cnf.datapath + "\\pubmed_weighted.pickle"
@@ -28,7 +29,7 @@ class PLCgraphDataset(DGLDataset):
         #     self.graph = pickle.load(f)
 
         #===== load saved networkx graph in gpickle/ ===========
-        filepath = cnf.datapath + "\\cora_weighted.gpickle"
+        filepath = cnf.datapath + "\\amazon_computer_weighted.gpickle"
         g = nx.read_gpickle(filepath)
         g = nx.to_directed(g)
 
@@ -50,10 +51,10 @@ class PLCgraphDataset(DGLDataset):
 
         # self.graph = dgl.from_networkx(g, node_attrs=['feature','label'], edge_attrs=['weight'])
 
-        self.graph.ndata['feat'] = self.graph.ndata['feature']
+        # self.graph.ndata['feat'] = self.graph.ndata['feature']
 
-        # varfeat = torch.normal(0, np.sqrt(0.000471), size=(self.graph.ndata['feature'].shape[0], self.graph.ndata['feature'].shape[1]))
-        # self.graph.ndata['feat'] = torch.add(self.graph.ndata['feature'], varfeat)
+        varfeat = torch.normal(0, np.sqrt(0.042), size=(self.graph.ndata['feature'].shape[0], self.graph.ndata['feature'].shape[1]))
+        self.graph.ndata['feat'] = torch.add(self.graph.ndata['feature'], varfeat)
 
         # self.graph.ndata['varfeat'] = self.graph.ndata['feature']
         # self.graph.ndata['label'] = self.graph.ndata['label']

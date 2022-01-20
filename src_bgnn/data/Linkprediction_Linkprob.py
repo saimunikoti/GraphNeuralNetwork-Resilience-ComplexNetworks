@@ -71,15 +71,16 @@ G, subjects = dataset.load(largest_connected_component_only=True)
 print(G.info())
 node_subject = subjects.astype("category").cat.codes
 
-# load pubmed
+# ============== load pubmed stellargraph ================
+
 dataset = datasets.PubMedDiabetes()
 display(HTML(dataset.description))
 G, _subjects = dataset.load()
 print(G.info())
 
-# load amazon co purchase graph dataset
-# data = dgl.data.CiteseerGraphDataset()
-data = dgl.data.AmazonCoBuyComputerDataset()
+# ============= load amazon co purchase graph dataset from dgl========
+
+dataset = dgl.data.AmazonCoBuyComputerDataset()
 
 def get_nxgraph_fromdgl(data):
     gorg = data[0]
@@ -105,17 +106,46 @@ def get_nxgraph_fromdgl(data):
 
     return g, nodesubjects
 
-g, node_subject = get_nxgraph_fromdgl(data)
+g, node_subject = get_nxgraph_fromdgl(dataset)
 
-filepath = cnf.datapath + "\\citeseer_fromdgl.gpickle"
+filepath = cnf.datapath + "\\amazon_computer.gpickle"
 nx.write_gpickle(g, filepath)
-
 G = StellarGraph.from_networkx(g, node_features="feature")
 
-# load citeseer from dgl
+#========== load ppi dataset from dgl ================
 
-##
-# Define an edge splitter on the original graph G:
+dataset = dgl.data.PPIDataset()
+
+def get_nxgraph_fromdgl(data, ind):
+    gorg = data[ind]
+    feat = gorg.ndata['feat']  # get node feature
+    label = gorg.ndata['label']  # get node labels
+
+    gnx = gorg.to_networkx(node_attrs=['feat','label'] )
+    gnx = nx.Graph(gnx)
+
+    # load amazon features into n graph
+    edgelist = list(gnx.edges)
+    g = nx.Graph()
+    g.add_edges_from(edgelist)
+
+    for cnodes in g.nodes:
+        g.nodes[cnodes]['feature'] = list(gnx.nodes[cnodes]['feat'].numpy())
+
+    nodesubjects = {}
+
+    for nodeiter in g.nodes:
+        nodesubjects[nodeiter] = gnx.nodes[nodeiter]['label'].numpy()
+
+    return g, nodesubjects
+
+g, node_subject = get_nxgraph_fromdgl(dataset, 13)
+
+# convert encoded labels to integers
+node_subjects = {ind: np.argmax(node_subject[ind]) for ind in node_subject.keys() }
+G = StellarGraph.from_networkx(g, node_features="feature")
+
+### Define an edge splitter on the original graph G:
 
 edge_splitter_test = EdgeSplitter(G)
 
@@ -142,7 +172,7 @@ edge_splitter_train = EdgeSplitter(G)
 # Randomly sample a fraction p=0.1 of all positive links, and same number of negative links, from G_test, and obtain the
 # reduced graph G_train with the sampled links removed:
 G_train, edge_ids_train, edge_labels_train = edge_splitter_train.train_test_split(
-    p=0.1, method="global", keep_connected=True
+    p=0.25, method="global", keep_connected=True
 )
 
 ## get whole graph edge ids and labels
@@ -196,11 +226,11 @@ model.compile(
 
 ##
 
-filepath = cnf.modelpath + '\\amazon_computer_linkpred.h5'
+filepath = cnf.modelpath + '\\ppi_linkpred.h5'
 
 mcp = ModelCheckpoint(filepath, save_best_only=True, monitor='val_loss', mode='min')
 
-history = model.fit(train_flow, epochs = 15, validation_data=test_flow,  callbacks=[mcp], verbose=2, shuffle=False)
+history = model.fit(train_flow, epochs = 20, validation_data=test_flow,  callbacks=[mcp], verbose=2, shuffle=False)
 
 ## prediction
 
@@ -230,8 +260,7 @@ for u,v in g3.edges():
     g3.edges[u,v]['weight'] = 1.0
 
 for (node1, d) in g3.nodes(data=True):
-    d['label'] = node_subject[node1]
-
+    d['label'] = node_subjects[node1]
 
 ## TODO load graph with partially weights
 
@@ -241,7 +270,7 @@ g3 = nx.read_gpickle(filepath)
 # predict edge weights
 i = 0
 
-for single_edge_id, single_edge_label in zip(edge_ids_test_all[50000:150000,:], edge_labels_test_all[50000:150000]):
+for single_edge_id, single_edge_label in zip(edge_ids_test_all, edge_labels_test_all):
     single_edge_id = np.reshape(single_edge_id, (1, 2))
     single_edge_label = np.reshape(single_edge_label, (1,))
     t_flow = all_gen.flow(single_edge_id, single_edge_label)
@@ -270,7 +299,7 @@ for count, nodeiter in enumerate(nodelist_index):
 
 ## save in gpickle format
 
-filepath = cnf.datapath + '\\amazon_computer_weighted' + ".gpickle"
+filepath = cnf.datapath + '\\ppi_weighted' + ".gpickle"
 nx.write_gpickle(g3, filepath, protocol=4)
 
 ## create & save graph in dgl format

@@ -158,7 +158,7 @@ def evaluate_test_mc(model, test_labels, device, dataloader, loss_fcn, g, n_mcsi
     classlabellist = np.array(classlabellist)
     onehot_encoder.fit_transform(classlabellist)
 
-    filepath = cnf.modelpath + "SemiResultsdic_pubmed_meanpred_var12.pkl"
+    filepath = cnf.modelpath + "Resultsdic_amazon-comp_meanpred_var12.pkl"
 
     with open(filepath, 'rb') as f:
         mean_dic = pickle.load(f)
@@ -214,7 +214,7 @@ def evaluate_test_mc(model, test_labels, device, dataloader, loss_fcn, g, n_mcsi
         for countc in range(n_classes):
             true_array[step, countc] = onehot_encoder.transform(temp_label)[0][countc]
 
-    filepath = cnf.modelpath + "SemiResultsdic_pubmed_varpred_var12.pkl"
+    filepath = cnf.modelpath + "Resultsdic_amazon-comp_varpred_var12.pkl"
 
     mean_dic['sigmatot_array'] = sigmatot_array
     mean_dic['nll_array'] = nll_array
@@ -235,11 +235,12 @@ def evaluate_test_mc(model, test_labels, device, dataloader, loss_fcn, g, n_mcsi
         Resultsdf[truename] = mean_dic['true_array'][:,count]
         Resultsdf[propvarname] = mean_dic['sigmatot_array'][:,count]
 
-    filepath = cnf.modelpath + "SemiResultsdic_pubmed_var12.csv"
+    filepath = cnf.modelpath + "Resultsdic_amazon-comp_var12.csv"
 
     Resultsdf.to_csv(filepath)
 
 def load_subtensor(nfeat, labels, seeds, input_nodes, device):
+
     """
     Extracts features and labels for a subset of nodes
     """
@@ -413,7 +414,7 @@ if __name__ == '__main__':
     data = n_classes, test_g, test_nfeat, test_labels, g
 
     start_time = time.time()
-    run(args, device, data, cnf.modelpath + "\\pubmed_uc.pt")
+    run(args, device, data, cnf.modelpath + "\\amazon-comp_uc.pt")
     end_time = time.time()-start_time
 
     print("total time", end_time)

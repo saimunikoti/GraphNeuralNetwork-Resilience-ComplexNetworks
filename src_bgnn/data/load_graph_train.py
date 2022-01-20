@@ -27,12 +27,12 @@ class PLCgraphDataset(DGLDataset):
         #     self.graph = pickle.load(f)
 
         #===== load saved networkx graph in gpickle/ ===========
-        filepath = cnf.datapath + "\\amazon_computer_weighted.gpickle"
+        filepath = cnf.datapath + "\\ppi_weighted.gpickle"
         g = nx.read_gpickle(filepath)
         g = nx.to_directed(g)
 
         # self.graph = dgl.from_networkx(g, node_attrs=['feature','label', 'meanfeature', 'varfeature'], edge_attrs=['weight'])
-        self.graph = dgl.from_networkx(g, node_attrs=['feature','label'], edge_attrs=['weight'])
+        self.graph = dgl.from_networkx(g, node_attrs=['feature', 'label'], edge_attrs=['weight'])
 
         #===== load original dgl graph  ===========
         # dataset = dgl.data.CoraGraphDataset()
@@ -51,9 +51,7 @@ class PLCgraphDataset(DGLDataset):
         # self.graph.ndata['varfeat'] = self.graph.ndata['feature']
         # self.graph.ndata['label'] = self.graph.ndata['label']
         self.graph.ndata['label'] = self.graph.ndata['label'].long()
-
         # generate mask for training nodes
-
         n_classes = self.num_classes
 
         array_lst_class = []
@@ -111,6 +109,7 @@ class PLCgraphDataset(DGLDataset):
         #             break
 
         rng = random.Random(69)
+
         # ======== train data ==================
 
         array_lst_train = []
@@ -151,7 +150,7 @@ class PLCgraphDataset(DGLDataset):
     @property
     def num_classes(self):
         r"""Number of classes for each node."""
-        return 10
+        return 121
 
     def __getitem__(self, i):
         return self.graph
